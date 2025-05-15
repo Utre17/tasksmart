@@ -1,16 +1,26 @@
-import { tasks, type Task, type InsertTask, users, type User, type InsertUser } from "@shared/schema";
+import { 
+  tasks, 
+  type Task, 
+  type InsertTask, 
+  type User, 
+  type InsertUser,
+  type SelectUser
+} from "@shared/schema";
+import { dbStorage } from "./db-storage";
 
 export interface IStorage {
-  // User operations (keeping from original)
-  getUser(id: number): Promise<User | undefined>;
+  // User operations
+  getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   
   // Task operations
   getAllTasks(): Promise<Task[]>;
+  getTasksByUserId(userId: string): Promise<Task[]>;
   getTaskById(id: number): Promise<Task | undefined>;
-  getTasksByCategory(category: string): Promise<Task[]>;
-  getTasksByPriority(priority: string): Promise<Task[]>;
+  getTasksByCategory(category: string, userId?: string): Promise<Task[]>;
+  getTasksByPriority(priority: string, userId?: string): Promise<Task[]>;
   createTask(task: InsertTask): Promise<Task>;
   updateTask(id: number, task: Partial<InsertTask>): Promise<Task | undefined>;
   deleteTask(id: number): Promise<boolean>;
@@ -18,15 +28,13 @@ export interface IStorage {
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<number, User>;
+  private users: Map<string, User>;
   private tasks: Map<number, Task>;
-  currentUserId: number;
   currentTaskId: number;
 
   constructor() {
     this.users = new Map();
     this.tasks = new Map();
-    this.currentUserId = 1;
     this.currentTaskId = 1;
 
     // Initialize with some sample tasks
@@ -72,8 +80,8 @@ export class MemStorage implements IStorage {
     initialTasks.forEach(task => this.createTask(task));
   }
 
-  // User methods (keeping from original)
-  async getUser(id: number): Promise<User | undefined> {
+  // User methods
+  async getUser(id: string): Promise<User | undefined> {
     return this.users.get(id);
   }
 
@@ -83,9 +91,24 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.email === email,
+    );
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentUserId++;
-    const user: User = { ...insertUser, id };
+    const id = crypto.randomUUID();
+    const now = new Date();
+    const user: User = { 
+      ...insertUser, 
+      id,
+      firstName: insertUser.firstName || null,
+      lastName: insertUser.lastName || null,
+      profileImageUrl: null,
+      createdAt: now,
+      updatedAt: now
+    };
     this.users.set(id, user);
     return user;
   }
@@ -95,19 +118,35 @@ export class MemStorage implements IStorage {
     return Array.from(this.tasks.values());
   }
 
+  async getTasksByUserId(userId: string): Promise<Task[]> {
+    return Array.from(this.tasks.values()).filter(
+      (task) => task.userId === userId
+    );
+  }
+
   async getTaskById(id: number): Promise<Task | undefined> {
     return this.tasks.get(id);
   }
 
-  async getTasksByCategory(category: string): Promise<Task[]> {
+  async getTasksByCategory(category: string, userId?: string): Promise<Task[]> {
     return Array.from(this.tasks.values()).filter(
-      (task) => task.category === category
+      (task) => {
+        if (userId) {
+          return task.category === category && task.userId === userId;
+        }
+        return task.category === category;
+      }
     );
   }
 
-  async getTasksByPriority(priority: string): Promise<Task[]> {
+  async getTasksByPriority(priority: string, userId?: string): Promise<Task[]> {
     return Array.from(this.tasks.values()).filter(
-      (task) => task.priority === priority
+      (task) => {
+        if (userId) {
+          return task.priority === priority && task.userId === userId;
+        }
+        return task.priority === priority;
+      }
     );
   }
 
@@ -117,7 +156,12 @@ export class MemStorage implements IStorage {
     const task: Task = { 
       ...insertTask, 
       id, 
-      createdAt: now 
+      userId: insertTask.userId || null,
+      completed: insertTask.completed || false,
+      dueDate: insertTask.dueDate || null,
+      notes: insertTask.notes || null,
+      createdAt: now,
+      updatedAt: now
     };
     this.tasks.set(id, task);
     return task;
@@ -127,7 +171,11 @@ export class MemStorage implements IStorage {
     const task = this.tasks.get(id);
     if (!task) return undefined;
 
-    const updatedTask: Task = { ...task, ...taskUpdate };
+    const updatedTask: Task = { 
+      ...task, 
+      ...taskUpdate,
+      updatedAt: new Date()
+    };
     this.tasks.set(id, updatedTask);
     return updatedTask;
   }
@@ -140,10 +188,17 @@ export class MemStorage implements IStorage {
     const task = this.tasks.get(id);
     if (!task) return undefined;
 
-    const updatedTask: Task = { ...task, completed };
+    const updatedTask: Task = { 
+      ...task, 
+      completed,
+      updatedAt: new Date()
+    };
     this.tasks.set(id, updatedTask);
     return updatedTask;
   }
 }
 
-export const storage = new MemStorage();
+// Determine which storage to use
+// For now, use in-memory storage to ensure the app works while we develop the database integration
+const memStorage = new MemStorage();
+export const storage = memStorage;
