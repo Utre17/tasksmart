@@ -298,16 +298,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a development user for testing
   apiRouter.post("/dev/create-user", async (req: Request, res: Response) => {
     try {
+      // Hash the password just like we would in registration
+      const password = await bcrypt.hash("password123", 10);
+      
       const user = await storage.createUser({
         email: "test@example.com",
         username: "testuser",
-        password: "password123",
+        password,
         firstName: "Test",
         lastName: "User"
       });
       
       // Return user without password
-      const { password, ...userWithoutPassword } = user;
+      const { password: pwd, ...userWithoutPassword } = user;
       return res.status(201).json(userWithoutPassword);
     } catch (error) {
       console.error("Error creating test user:", error);

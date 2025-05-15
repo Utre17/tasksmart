@@ -98,6 +98,10 @@ export class MemStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
+    // In a real application, we should hash the password
+    // This is already handled in the registerUser function in auth.ts
+    // but we need to handle it here for our dev endpoints
+    
     const id = crypto.randomUUID();
     const now = new Date();
     const user: User = { 
