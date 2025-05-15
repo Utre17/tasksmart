@@ -1,20 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import axios from "axios";
-
-interface User {
-  id: string;
-  email: string;
-  username: string;
-  firstName: string | null;
-  lastName: string | null;
-  profileImageUrl: string | null;
-}
-
-interface AuthResponse {
-  user: User;
-  token: string;
-}
+import api from "@/lib/api";
+import { User } from "@shared/schema";
 
 interface LoginCredentials {
   email: string;
@@ -33,30 +20,13 @@ export function useAuth() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   
-  // Store and retrieve the JWT token
-  const getToken = () => localStorage.getItem("token");
-  const setToken = (token: string) => localStorage.setItem("token", token);
-  const removeToken = () => localStorage.removeItem("token");
-  
   // Check if user is authenticated
-  const isAuthenticated = !!getToken();
-  
-  // Configure axios with auth header
-  const configureAxios = () => {
-    const token = getToken();
-    if (token) {
-      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-    } else {
-      delete axios.defaults.headers.common["Authorization"];
-    }
-  };
-  
-  // Configure on hook initialization
-  configureAxios();
+  const isAuthenticated = !!localStorage.getItem("token");
   
   // Get current user
   const userQuery = useQuery<User>({
     queryKey: ["/api/auth/me"],
+    queryFn: api.getCurrentUser,
     enabled: isAuthenticated,
     retry: false,
     staleTime: 60 * 1000, // 1 minute
@@ -64,13 +34,8 @@ export function useAuth() {
   
   // Login mutation
   const loginMutation = useMutation({
-    mutationFn: async (credentials: LoginCredentials) => {
-      const response = await axios.post<AuthResponse>("/api/auth/login", credentials);
-      return response.data;
-    },
+    mutationFn: api.login,
     onSuccess: (data) => {
-      setToken(data.token);
-      configureAxios();
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       
       toast({
@@ -89,13 +54,13 @@ export function useAuth() {
   
   // Register mutation
   const registerMutation = useMutation({
-    mutationFn: async (data: RegisterData) => {
-      const response = await axios.post<AuthResponse>("/api/auth/register", data);
-      return response.data;
-    },
+    mutationFn: api.register,
     onSuccess: (data) => {
-      setToken(data.token);
-      configureAxios();
+      // If registration returns a token, save it (some APIs may require separate login)
+      if (data.token) {
+        localStorage.setItem("token", data.token);
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       
       toast({
@@ -114,8 +79,7 @@ export function useAuth() {
   
   // Logout function
   const logout = () => {
-    removeToken();
-    configureAxios();
+    api.logout();
     queryClient.invalidateQueries();
     
     toast({
