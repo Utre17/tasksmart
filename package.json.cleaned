@@ -9,7 +9,11 @@
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "db:migrate": "drizzle-kit generate:pg"
+    "db:migrate": "drizzle-kit generate:pg",
+    "db:init": "node scripts/init-db.js",
+    "db:seed": "node scripts/init-db.js --create-test-user",
+    "setup:auth": "node scripts/migrate-auth.js",
+    "setup:local": "npm run setup:auth && npm run db:init && npm run db:seed"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
