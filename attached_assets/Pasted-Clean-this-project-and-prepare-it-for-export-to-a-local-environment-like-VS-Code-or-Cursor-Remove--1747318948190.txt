@@ -1,0 +1,55 @@
+Clean this project and prepare it for export to a local environment like VS Code or Cursor.
+Remove any Replit-specific files like .replit or replit.nix, clean up package.json to remove unused dependencies, create a .env.example file from .env, and organize the file structure using best practices.
+Also include comments where needed so I can understand what's what
+
+
+# Project Cleanup and Export Prompt
+
+## Task Overview
+Clean up this project and prepare it for export to a local development environment (VS Code, Cursor, etc.) following best practices.
+
+## Specific Tasks
+
+1. **Remove platform-specific files:**
+   - Delete any Replit-specific files (`.replit`, `replit.nix`)
+   - Remove any other platform-specific configuration files not needed locally
+
+2. **Clean up dependencies:**
+   - Review `package.json` and remove unused dependencies
+   - Separate dev dependencies from production dependencies
+   - Update outdated packages to compatible versions if needed
+
+3. **Environment setup:**
+   - Create a `.env.example` file from the `.env` file
+   
+4. **File structure organization:**
+   - Organize files into appropriate directories (src, public, assets, etc.)
+   - Group related files and ensure logical folder structure
+   - Follow standard conventions for the project's language/framework
+
+5. **Documentation:**
+   - Add comprehensive comments to complex or unclear code sections
+   - Create/update README.md with:
+     - Project description
+     - Setup instructions 
+     - How to run locally
+     - Project structure overview
+
+6. **Code quality:**
+   - Format code using standard style conventions
+   - Remove any development debugging code
+   - Ensure consistent naming conventions
+
+## Output Requirements
+
+1. A list of all changes made
+2. Instructions for running the project locally
+3. Any notes about parts of the code that might need attention
+4. Suggestions for further improvements
+
+## Additional Guidelines
+
+- Maintain all core functionality
+- Don't remove any essential features
+- Prioritize making the project easy to understand for new developers
+- Use industry best practices specific to the project's language/framework
