@@ -7,6 +7,7 @@ import { processTaskWithAI } from "./openrouter";
 import { setupTables } from "./migrations";
 import { authenticateToken } from "./auth";
 import authRouter from "./auth-routes";
+import bcrypt from "bcrypt";
 // Import the enhanced AI capabilities
 import fs from 'fs';
 import path from 'path';
