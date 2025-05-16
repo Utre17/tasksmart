@@ -1,109 +1,147 @@
-import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
-import { storage } from "./storage";
-import { InsertUser, LoginUser, User, SelectUser } from "@shared/schema";
+// All manual authentication code removed. Use Firebase Auth instead.
+// This file is now a placeholder for future server-side Firebase token verification if needed.
 
-// Secret key for JWT signing
-const JWT_SECRET = process.env.JWT_SECRET || "default_secret_key_change_in_production";
-// Token expiration (1 day)
-const TOKEN_EXPIRATION = 60 * 60 * 24;
+import admin from "firebase-admin";
+import { Request, Response, NextFunction } from "express";
+import { fileURLToPath } from 'url';
+import path from "path";
+import fs from "fs";
 
-// Helper to create a token
-export function generateToken(user: User): string {
-  // Create payload (don't include sensitive data)
-  const payload = {
-    id: user.id,
-    email: user.email,
-    username: user.username
-  };
-  
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_EXPIRATION });
+// Extend Express Request type to include user
+declare global {
+  namespace Express {
+    interface Request {
+      user?: admin.auth.DecodedIdToken;
+    }
+  }
 }
 
-// Helper to verify a token
-export function verifyToken(token: string): { id: string; email: string; username: string } | null {
+// Set up __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Initialize Firebase Admin
+try {
+  const serviceAccountPath = path.join(__dirname, "config", "firebase-service-account.json");
+  
+  // Check if the service account file exists
+  if (fs.existsSync(serviceAccountPath)) {
+    const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+    
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+    
+    console.log("Firebase Admin SDK initialized successfully");
+  } else {
+    console.warn(
+      "Firebase service account file not found at:", 
+      serviceAccountPath, 
+      "\nPlease follow the instructions in the file to set up your credentials."
+    );
+    
+    // Initialize with GOOGLE_APPLICATION_CREDENTIALS environment variable if set
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      admin.initializeApp();
+      console.log("Firebase Admin SDK initialized with environment credentials");
+    } else {
+      console.warn("Firebase Admin SDK not initialized - authentication middleware will fail");
+    }
+  }
+} catch (error) {
+  console.error("Error initializing Firebase Admin SDK:", error);
+}
+
+/**
+ * Middleware to verify Firebase ID tokens in HTTP requests.
+ * 
+ * This middleware decodes the token provided in the Authorization header,
+ * and sets the resulting decoded token on the req.user property.
+ */
+export const verifyFirebaseToken = async (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: "Unauthorized: No token provided" });
+  }
+  
+  const token = authHeader.split(" ")[1];
+  
   try {
-    return jwt.verify(token, JWT_SECRET) as { id: string; email: string; username: string };
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    req.user = decodedToken;
+    next();
   } catch (error) {
+    console.error("Error verifying token:", error);
+    return res.status(401).json({ message: "Unauthorized: Invalid token" });
+  }
+};
+
+/**
+ * Middleware to check if a user has admin role.
+ * This should be used after verifyFirebaseToken middleware.
+ */
+export const requireAdmin = async (req: Request, res: Response, next: NextFunction) => {
+  if (!req.user) {
+    return res.status(401).json({ message: "Unauthorized: Authentication required" });
+  }
+  
+  try {
+    // You can implement your admin check here
+    // Option 1: Check a custom claim in the Firebase token
+    if (req.user.admin === true) {
+      return next();
+    }
+    
+    // Option 2: Check against your database
+    // const user = await yourDB.getUser(req.user.uid);
+    // if (user.role === 'admin') {
+    //   return next();
+    // }
+    
+    return res.status(403).json({ message: "Forbidden: Admin access required" });
+  } catch (error) {
+    console.error("Error checking admin status:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * Generates Firebase custom claims for a user
+ * This can be used to add roles or other attributes to users
+ */
+export const setUserClaims = async (uid: string, claims: object) => {
+  try {
+    await admin.auth().setCustomUserClaims(uid, claims);
+    return true;
+  } catch (error) {
+    console.error("Error setting user claims:", error);
+    return false;
+  }
+};
+
+/**
+ * Gets a user from Firebase Auth by UID or verifies a token
+ * @param uidOrToken A Firebase UID or ID token
+ */
+export const getFirebaseUser = async (uidOrToken: string) => {
+  try {
+    // Check if this is a token by attempting to verify it
+    try {
+      const decodedToken = await admin.auth().verifyIdToken(uidOrToken);
+      if (decodedToken) {
+        // If successful, it's a token, so return the user
+        return await admin.auth().getUser(decodedToken.uid);
+      }
+    } catch (tokenError) {
+      // If verification fails, it might be a UID, so continue
+      console.log("Input is not a valid token, trying as UID");
+    }
+    
+    // Treat as UID if token verification failed
+    return await admin.auth().getUser(uidOrToken);
+  } catch (error) {
+    console.error("Error getting Firebase user:", error);
     return null;
   }
-}
-
-// Register a new user
-export async function registerUser(userData: InsertUser): Promise<{ user: Omit<User, "password">; token: string } | { error: string }> {
-  try {
-    // Check if email already exists
-    const existingEmail = await storage.getUserByEmail(userData.email);
-    if (existingEmail) {
-      return { error: "Email already in use" };
-    }
-    
-    // Check if username already exists
-    const existingUsername = await storage.getUserByUsername(userData.username);
-    if (existingUsername) {
-      return { error: "Username already in use" };
-    }
-    
-    // Create user
-    const user = await storage.createUser(userData);
-    
-    // Generate token
-    const token = generateToken(user);
-    
-    // Return user without password and token
-    const { password, ...userWithoutPassword } = user;
-    
-    return { user: userWithoutPassword, token };
-  } catch (error) {
-    console.error("Error registering user:", error);
-    return { error: "Failed to register user" };
-  }
-}
-
-// Login a user
-export async function loginUser(credentials: LoginUser): Promise<{ user: Omit<User, "password">; token: string } | { error: string }> {
-  try {
-    // Find user by email
-    const user = await storage.getUserByEmail(credentials.email);
-    if (!user) {
-      return { error: "Invalid email or password" };
-    }
-    
-    // Check password
-    const passwordMatch = await bcrypt.compare(credentials.password, user.password);
-    if (!passwordMatch) {
-      return { error: "Invalid email or password" };
-    }
-    
-    // Generate token
-    const token = generateToken(user);
-    
-    // Return user without password and token
-    const { password, ...userWithoutPassword } = user;
-    
-    return { user: userWithoutPassword, token };
-  } catch (error) {
-    console.error("Error logging in user:", error);
-    return { error: "Failed to login" };
-  }
-}
-
-// Middleware to protect routes
-export function authenticateToken(req: any, res: any, next: any) {
-  // Get token from header
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
-  
-  if (!token) {
-    return res.status(401).json({ message: "Authentication required" });
-  }
-  
-  const user = verifyToken(token);
-  if (!user) {
-    return res.status(403).json({ message: "Invalid or expired token" });
-  }
-  
-  // Add user to request
-  req.user = user;
-  next();
-}
+};

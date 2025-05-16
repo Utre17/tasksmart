@@ -49,16 +49,16 @@ export default function TaskList({ tasks, isLoading, filter }: TaskListProps) {
   });
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-white rounded-lg shadow-sm p-6 transition-all duration-300 hover:shadow-md">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold">Your Tasks</h2>
+        <h2 className="text-xl font-semibold text-gray-800">Your Tasks</h2>
         <div className="flex items-center space-x-2">
-          <button type="button" className="text-gray-500 hover:text-primary p-1">
+          <button type="button" className="text-gray-500 hover:text-primary p-1 transition-colors duration-200">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
               <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
             </svg>
           </button>
-          <button type="button" className="text-gray-500 hover:text-primary p-1">
+          <button type="button" className="text-gray-500 hover:text-primary p-1 transition-colors duration-200">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
               <path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z" />
               <path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9" />
@@ -66,9 +66,15 @@ export default function TaskList({ tasks, isLoading, filter }: TaskListProps) {
             </svg>
           </button>
           <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-gray-400">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+            </div>
             <Input 
               type="text" 
-              className="bg-gray-50 text-sm rounded-md w-40 px-3 py-1 border-gray-300 focus:ring-primary focus:border-primary"
+              className="bg-gray-50 text-sm rounded-lg pl-10 pr-3 py-2 w-[180px] border-gray-200 focus:ring-primary focus:border-primary transition-all duration-200"
               placeholder="Search tasks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -101,7 +107,7 @@ export default function TaskList({ tasks, isLoading, filter }: TaskListProps) {
           ))}
         </div>
       ) : (
-        <div className="text-center py-10">
+        <div className="text-center py-10 bg-gray-50 rounded-lg border border-gray-100">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto text-gray-400 mb-4 w-12 h-12">
             <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
             <path d="M3 9h18" />
@@ -118,7 +124,7 @@ export default function TaskList({ tasks, isLoading, filter }: TaskListProps) {
 
       {filteredTasks.length > 5 && (
         <div className="mt-6 text-center">
-          <button type="button" className="text-primary hover:text-primary/80 text-sm font-medium flex items-center mx-auto">
+          <button type="button" className="text-primary hover:text-primary/80 text-sm font-medium flex items-center mx-auto transition-colors duration-200">
             <span>View more tasks</span>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-1 w-4 h-4">
               <path d="m6 9 6 6 6-6" />

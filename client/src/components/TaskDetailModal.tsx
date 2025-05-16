@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Task, Category, Priority } from "@/types";
 import { taskCategories, taskPriorities } from "@shared/schema";
 import { useTasks } from "@/hooks/useTasks";
+import api from "@/lib/api";
 
 interface TaskDetailModalProps {
   isOpen: boolean;
@@ -22,6 +23,8 @@ export default function TaskDetailModal({ isOpen, onClose, task }: TaskDetailMod
   const [priority, setPriority] = useState<Priority>("Medium");
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summaryNote, setSummaryNote] = useState<string | null>(null);
 
   useEffect(() => {
     if (task) {
@@ -30,6 +33,7 @@ export default function TaskDetailModal({ isOpen, onClose, task }: TaskDetailMod
       setPriority(task.priority as Priority);
       setDueDate(task.dueDate || "");
       setNotes(task.notes || "");
+      setSummaryNote(null);
     }
   }, [task]);
 
@@ -50,6 +54,29 @@ export default function TaskDetailModal({ isOpen, onClose, task }: TaskDetailMod
     onClose();
   };
 
+  const handleSummarizeTitle = async () => {
+    if (!task) return;
+    
+    try {
+      setIsSummarizing(true);
+      setSummaryNote(null);
+      
+      const result = await api.summarizeTask(title);
+      
+      if (result.summary) {
+        setTitle(result.summary);
+        if (result.note) {
+          setSummaryNote(result.note);
+        }
+      }
+    } catch (error) {
+      console.error("Error summarizing task:", error);
+      setSummaryNote("Failed to summarize task. Please try again.");
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+
   if (!task) return null;
 
   return (
@@ -60,12 +87,27 @@ export default function TaskDetailModal({ isOpen, onClose, task }: TaskDetailMod
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="edit-task-title">Task Title</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="edit-task-title">Task Title</Label>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={handleSummarizeTitle}
+                disabled={isSummarizing || !title.trim()}
+                className="text-xs h-7 px-2"
+              >
+                {isSummarizing ? "Summarizing..." : "Summarize"}
+              </Button>
+            </div>
             <Input
               id="edit-task-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
+            {summaryNote && (
+              <p className="text-xs text-amber-600 mt-1">{summaryNote}</p>
+            )}
           </div>
           
           <div className="grid grid-cols-2 gap-4">

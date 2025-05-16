@@ -1,86 +1,169 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useTasks } from "@/hooks/useTasks";
+import { useTaskManager } from "@/hooks/useTaskManager";
+import { useAuth } from "@/hooks/useAuth";
+import api from "@/lib/api";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle, ZapIcon, PlusIcon, ListChecks, Sparkles } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function TaskInput() {
   const [taskInput, setTaskInput] = useState("");
-  const { processTask, isProcessing } = useTasks();
+  const [summaryNote, setSummaryNote] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { processTask, isProcessing } = useTaskManager();
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const { isGuest } = useAuth();
 
-  const handleAddTask = () => {
+  const handleAddTask = async () => {
     if (taskInput.trim() === "") return;
     
-    processTask(taskInput);
-    setTaskInput("");
+    try {
+      setErrorMessage(null);
+      await processTask(taskInput);
+      setTaskInput("");
+      setSummaryNote(null);
+    } catch (error) {
+      console.error("Error processing task:", error);
+      setErrorMessage("Failed to process task. Please try again or simplify your task description.");
+    }
+  };
+
+  const handleSummarizeInput = async () => {
+    if (taskInput.trim() === "") return;
+    
+    try {
+      setIsSummarizing(true);
+      setSummaryNote(null);
+      setErrorMessage(null);
+      
+      const result = await api.summarizeTask(taskInput);
+      
+      if (result.summary) {
+        setTaskInput(result.summary);
+        if (result.note) {
+          setSummaryNote(result.note);
+        }
+      }
+    } catch (error) {
+      console.error("Error summarizing task:", error);
+      setErrorMessage("Failed to summarize task. Please try again.");
+    } finally {
+      setIsSummarizing(false);
+    }
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-      <h2 className="text-xl font-semibold mb-4">Add New Task</h2>
-      <div className="space-y-4">
-        <div>
-          <label htmlFor="task-input" className="sr-only">Task Input</label>
-          <div className="relative rounded-md shadow-sm">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 w-5 h-5">
-                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-                <path d="M5 3v4" />
-                <path d="M19 17v4" />
-                <path d="M3 5h4" />
-                <path d="M17 19h4" />
-              </svg>
-            </div>
-            <Input
-              type="text"
-              id="task-input"
-              value={taskInput}
-              onChange={(e) => setTaskInput(e.target.value)}
-              className="block w-full pl-10 pr-12 py-4 sm:text-sm border-gray-300 rounded-md bg-gray-50 focus:ring-primary focus:border-primary"
-              placeholder="Type your task in natural language (e.g., 'Remind me to call mom tomorrow at 5 PM')"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleAddTask();
-                }
-              }}
-            />
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 cursor-pointer hover:text-primary w-5 h-5">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <line x1="12" x2="12" y1="19" y2="23" />
-                <line x1="8" x2="16" y1="23" y2="23" />
-              </svg>
-            </div>
+    <Card className="mb-6">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-xl flex items-center gap-2">
+              <ListChecks className="w-5 h-5 text-primary" />
+              Add New Task
+            </CardTitle>
+            <CardDescription className="text-sm mt-1">
+              {isGuest 
+                ? "Enter a task description to organize your work" 
+                : "Enter a task description and our AI will categorize it for you"}
+            </CardDescription>
           </div>
         </div>
-        <p className="text-sm text-gray-500">Our AI will automatically categorize and prioritize your task</p>
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            onClick={handleAddTask}
-            disabled={isProcessing || !taskInput.trim()}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-          >
-            {isProcessing ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Processing...
-              </>
-            ) : (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 w-4 h-4">
-                  <path d="M5 12h14" />
-                  <path d="M12 5v14" />
-                </svg>
-                Add Task
-              </>
-            )}
-          </Button>
+      </CardHeader>
+      
+      <CardContent>
+        {errorMessage && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Sparkles className="text-gray-400 w-5 h-5" />
+          </div>
+          <Input
+            id="task-input"
+            placeholder="Enter a task description (e.g., 'Call client tomorrow about project')"
+            value={taskInput}
+            onChange={(e) => setTaskInput(e.target.value)}
+            className="pl-10 pr-16 h-12 border-gray-200 focus:border-primary"
+            onKeyDown={(e) => e.key === 'Enter' && !isProcessing && handleAddTask()}
+          />
         </div>
-      </div>
-    </div>
+        
+        {summaryNote && (
+          <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+            <AlertCircle className="h-3 w-3" />
+            {summaryNote}
+          </p>
+        )}
+        
+        <div className="text-xs text-gray-500 mt-2 ml-1">
+          {isGuest ? (
+            <p>Simple categorization will be applied to your task (e.g., using keywords like "work", "urgent", etc.)</p>
+          ) : (
+            <p>Our AI will analyze your task to determine category, priority, and due date</p>
+          )}
+        </div>
+      </CardContent>
+      
+      <CardFooter className="flex justify-between gap-2 pt-2">
+        {!isGuest && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSummarizeInput}
+                  disabled={isSummarizing || isProcessing || !taskInput.trim()}
+                  className="flex items-center"
+                >
+                  {isSummarizing ? (
+                    <>
+                      <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                      <span>Summarizing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ZapIcon className="mr-2 h-4 w-4" />
+                      <span>Summarize</span>
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Use AI to make your task description more concise</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
+        <Button
+          type="button"
+          onClick={handleAddTask}
+          disabled={isProcessing || !taskInput.trim()}
+          className={`flex items-center gap-2 ${isGuest && 'ml-auto'}`}
+        >
+          {isProcessing ? (
+            <>
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+              <span>Processing...</span>
+            </>
+          ) : (
+            <>
+              <PlusIcon className="h-4 w-4" />
+              <span>Add Task</span>
+            </>
+          )}
+        </Button>
+      </CardFooter>
+    </Card>
   );
 }

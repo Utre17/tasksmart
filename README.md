@@ -1,165 +1,216 @@
-# TaskSmart - AI-powered Task Management
+# TaskSmart - Intelligent Task Management
 
-TaskSmart is a modern task management application that uses AI to intelligently organize and prioritize tasks. The application processes natural language inputs to categorize tasks, set priorities, and extract due dates automatically.
-
-## Features
-
-- 🤖 AI-powered task processing
-- 🔒 JWT-based authentication system
-- 📱 Responsive design for all devices
-- 🌈 Modern UI with Tailwind CSS and Shadcn components
-- 🗄️ PostgreSQL database integration
-- 📊 Task categorization and filtering
-- 🔔 Priority-based task organization
-
-## Tech Stack
-
-- **Frontend**: React, TanStack Query, Tailwind CSS, Shadcn UI
-- **Backend**: Node.js, Express
-- **Database**: PostgreSQL with Drizzle ORM
-- **Authentication**: JWT (JSON Web Tokens)
-- **AI Integration**: OpenAI/OpenRouter API
+TaskSmart is a modern task management system featuring intelligent task processing, analytics, and Firebase Authentication.
 
 ## Project Structure
 
 ```
 tasksmart/
-├── client/                 # Frontend React application
+├── client/                 # React Frontend
 │   ├── src/
-│   │   ├── components/     # React components
+│   │   ├── components/     # React components (AuthProvider, UI Components)
 │   │   ├── hooks/          # Custom React hooks
-│   │   ├── lib/            # Utility functions and API client
-│   │   ├── pages/          # Page components
-│   │   └── types/          # TypeScript type definitions
-├── server/                 # Backend Express server
-│   ├── auth.ts             # Authentication logic
-│   ├── db.ts               # Database connection and setup
-│   ├── index.ts            # Entry point for the server
-│   ├── migrations.ts       # Database migrations
-│   ├── routes.ts           # API route definitions
-│   └── storage.ts          # Data storage and retrieval
-├── shared/                 # Shared code between frontend and backend
-│   └── schema.ts           # Database schema and type definitions
-├── migrations/             # Database migration files
-└── attached_assets/        # Static assets
+│   │   ├── lib/            # Utility functions (Firebase, API client)
+│   │   ├── pages/          # Page components (Home, Analytics, Settings)
+│   │   └── styles/         # Tailwind CSS (if any custom CSS is needed)
+├── server/                 # Node.js + Express Backend
+│   ├── api/                # All API routes organized by feature
+│   │   ├── tasks.ts        # Task management endpoints
+│   │   └── users.ts        # User management endpoints
+│   ├── config/             # Configuration files
+│   │   └── firebase-service-account.json # Firebase service account
+│   ├── utils/              # Utility functions
+│   │   └── errorHandler.ts # Error handling utilities
+│   ├── auth.ts             # Firebase Auth verification middleware
+│   ├── db.ts               # Database connection (PostgreSQL with Drizzle ORM)
+│   ├── index.ts            # Main server entry point
+│   └── storage.ts          # Data access layer
+└── shared/                 # Shared Types/Schema (TypeScript)
+    └── schema.ts           # Database schema and type definitions
 ```
 
-## Getting Started
+## Features
+
+- **Firebase Authentication**: Secure authentication with email/password and Google sign-in options
+- **Task Management**: Create, read, update, and delete tasks
+- **Analytics**: Track your task completion rate and productivity
+- **Role-Based Access Control**: Admin, manager, and user roles with different permissions
+- **AI-Powered Task Processing**: Automatically categorize and organize tasks based on natural language input
+- **Responsive UI**: Built with React and Tailwind CSS for a modern, mobile-friendly interface
+
+## Tech Stack
+
+- **Frontend**: React, TypeScript, Tailwind CSS, shadcn/ui
+- **Backend**: Node.js, Express, Firebase Admin SDK
+- **Database**: PostgreSQL with Drizzle ORM
+- **Authentication**: Firebase Authentication
+- **Deployment**: Docker-ready
+
+## Setup Instructions
 
 ### Prerequisites
 
-- Node.js (v18 or higher)
+- Node.js (16+)
 - PostgreSQL database
-- OpenAI API key (optional for enhanced AI features)
+- Firebase project with Authentication enabled
 
-### Setup Instructions
+### Environment Setup
 
-1. **Clone the repository**
+1. Clone the repository
+2. Create a `.env` file in the root directory (use `env.example` as a template)
+3. Set up your Firebase project:
+   - Create a project in the [Firebase Console](https://console.firebase.google.com/)
+   - Enable Authentication (Email/Password and Google providers)
+   - Generate a service account key file for admin operations (Project Settings > Service Accounts > Generate new private key)
+   - Place the service account JSON file in `server/config/firebase-service-account.json`
+
+### Installation
 
 ```bash
-git clone <repository-url>
-cd tasksmart
-```
-
-2. **Install dependencies**
-
-```bash
+# Install dependencies
 npm install
-```
 
-3. **Set up environment variables**
-
-Create a `.env` file in the root directory with the following variables (see `.env.example` for reference):
-
-```
-DATABASE_URL=postgres://username:password@localhost:5432/tasksmart
-JWT_SECRET=your_secure_jwt_secret
-SESSION_SECRET=your_secure_session_secret
-OPENAI_API_KEY=your_openai_api_key
-```
-
-4. **Set up database**
-
-Create a PostgreSQL database and update the `DATABASE_URL` in your `.env` file.
-
-Apply the database schema:
-
-```bash
+# Initialize the database
 npm run db:push
-```
 
-5. **Run the development server**
-
-```bash
+# Start the development server
 npm run dev
 ```
 
-The application will be available at `http://localhost:5000`.
+The application will be available at http://localhost:5000
 
 ### Building for Production
 
-1. **Build the application**
-
 ```bash
+# Build the client and server
 npm run build
-```
 
-2. **Start the production server**
-
-```bash
+# Start the production server
 npm start
 ```
 
-## Authentication
+## Authentication Flow
 
-The application uses JWT-based authentication. Use the following test account for development:
+TaskSmart uses Firebase Authentication for all user management:
 
-- **Email**: test@example.com
-- **Password**: password123
+1. Users sign up/login via the frontend UI
+2. Firebase issues an ID token after successful authentication
+3. Token is passed to the backend in the Authorization header as a Bearer token
+4. Server verifies the token using Firebase Admin SDK
+5. User roles and permissions are managed through Firebase custom claims
 
-To create your own account, use the registration form at `/auth`.
+## API Endpoints
 
-## AI Integration
+The API follows RESTful conventions:
 
-TaskSmart uses AI to process natural language task inputs. The application can:
+### Task Management
 
-- Extract task title, category, and priority from natural language
-- Suggest due dates based on text content
-- Generate task summaries and insights
+- `GET /api/tasks` - Get all tasks for the current user
+- `GET /api/tasks/:id` - Get a specific task by ID
+- `POST /api/tasks` - Create a new task
+- `PUT /api/tasks/:id` - Update an existing task
+- `DELETE /api/tasks/:id` - Delete a task
+- `PATCH /api/tasks/:id/complete` - Toggle task completion status
 
-To enable enhanced AI features, provide your own OpenAI API key in the `.env` file.
+### User Management
 
-## Database Management
-
-The application uses Drizzle ORM for database management. Key commands:
-
-- `npm run db:push` - Apply schema changes to the database
-- `npm run db:migrate` - Generate migration files
-
-## Troubleshooting
-
-### Database Connection Issues
-
-If you encounter database connection issues, check:
-- PostgreSQL service is running
-- Database credentials in `.env` are correct
-- Database exists and is accessible
-
-### Authentication Issues
-
-If authentication is not working:
-- Check JWT_SECRET in `.env`
-- Ensure the user exists in the database
-- Verify password matches (for test user: password123)
-
-## Future Improvements
-
-- Progressive Web App (PWA) support for offline functionality
-- Enhanced AI insights and analytics
-- Email notifications for due tasks
-- Team collaboration features
-- Integration with calendar services
+- `GET /api/users/me` - Get current user profile
+- `GET /api/users/verify` - Verify authentication status
+- `PATCH /api/users/:uid/role` - Update user role (admin only)
 
 ## License
 
 MIT
+
+# TaskSmart Authentication System
+
+This document describes the JWT-based authentication system implemented in TaskSmart, including user registration, login, logout functionality, and role-based access control.
+
+## Features
+
+- Secure user registration with password hashing using bcrypt
+- JWT-based authentication
+- Role-based access control (User, Admin)
+- Protected API routes with middleware
+- Admin dashboard with user management
+
+## Authentication Flow
+
+1. **Registration**: Users register with email, username, and password
+2. **Login**: Users authenticate and receive a JWT token
+3. **Protected Routes**: JWT token is used to access protected resources
+4. **Logout**: Token is invalidated client-side
+
+## API Endpoints
+
+### Authentication
+
+- `POST /api/auth/register` - Register a new user
+- `POST /api/auth/login` - Login and get JWT token
+- `POST /api/auth/logout` - Logout (client-side implementation)
+- `GET /api/auth/me` - Get current user information
+
+### User Management (Admin only)
+
+- `GET /api/auth/users` - Get all users (admin only)
+- `GET /api/auth/users/:userId` - Get user by ID (admin or own user)
+- `PATCH /api/auth/users/:userId/role` - Update user role (admin only)
+
+### Admin Dashboard
+
+- `GET /api/admin/stats` - Get system statistics (admin only)
+
+## Role-Based Access Control
+
+TaskSmart implements two user roles:
+
+1. **User**: Regular user with access to their own tasks
+2. **Admin**: Administrator with access to user management and system statistics
+
+## Setting Up the Admin User
+
+To create an admin user, run:
+
+```bash
+npm run setup:admin
+```
+
+This will create an admin user with the following default credentials:
+- Email: admin@tasksmart.com
+- Password: Admin123!
+
+You can customize the admin credentials by setting environment variables:
+
+```bash
+ADMIN_EMAIL=custom@example.com ADMIN_PASSWORD=SecurePassword npm run setup:admin
+```
+
+### Important Notes About Admin Setup:
+
+- If you have a PostgreSQL database configured (via DATABASE_URL in your .env file), the admin user will be stored in the database.
+- If no database is configured, an in-memory admin user will be created for testing purposes, but this user will be lost when the server restarts.
+- For production use, you should always configure a database connection.
+
+## Environment Variables
+
+Configure the following environment variables for secure authentication:
+
+- `JWT_SECRET` - Secret key for JWT token signing (default: a placeholder value for development)
+- `ADMIN_EMAIL` - Email for admin user
+- `ADMIN_PASSWORD` - Password for admin user
+
+## Client-Side Implementation
+
+The client uses React Query to handle authentication state and API calls:
+
+- `useAuth()` hook provides authentication functionality
+- `ProtectedRoute` component restricts access based on authentication and roles
+- Admin dashboard displays system statistics and user management
+
+## Security Considerations
+
+- Password hashing with bcrypt (10 rounds)
+- JWT tokens expire after 24 hours
+- HTTPS recommended for production
+- Role validation on both client and server
+- Input validation using Zod schemas

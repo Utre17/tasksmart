@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light mode variables (default) */
 :root {
   --background: 220 15% 98%; /* F9FAFB */
   --foreground: 222 47% 11%; /* 1F2937 */
@@ -31,60 +32,189 @@
   --work: 0 84% 60%; /* EF4444 */
   --personal: 38 92% 50%; /* F59E0B */
   --important: 259 94% 51%; /* 8B5CF6 */
+  --priority-high: 0 84% 60%; /* Red */
+  --priority-medium: 38 92% 50%; /* Yellow/Amber */
+  --priority-low: 217 91% 60%; /* Blue */
 }
 
+/* Dark mode variables */
 .dark {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --primary: 217 91% 54%;
-  --primary-foreground: 211 100% 99%;
-  --secondary: 161 84% 40%;
-  --secondary-foreground: 0 0% 98%;
-  --accent: 236 96% 67%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 0 0% 98%;
-  --ring: 240 4.9% 83.9%;
+  --background: 240 10% 3.9%; /* 0A0A0B */
+  --foreground: 0 0% 98%; /* FAFAFA */
+  --muted: 240 3.7% 15.9%; /* 27272A */
+  --muted-foreground: 240 5% 64.9%; /* A1A1AA */
+  --popover: 240 10% 3.9%; /* 0A0A0B */
+  --popover-foreground: 0 0% 98%; /* FAFAFA */
+  --card: 240 10% 3.9%; /* 0A0A0B */
+  --card-foreground: 0 0% 98%; /* FAFAFA */
+  --border: 240 3.7% 15.9%; /* 27272A */
+  --input: 240 3.7% 15.9%; /* 27272A */
+  --primary: 217 91% 54%; /* 2563EB - keep the same */
+  --primary-foreground: 211 100% 99%; /* F1F5FF */
+  --secondary: 161 84% 40%; /* 10B981 - keep the same */
+  --secondary-foreground: 0 0% 98%; /* FAFAFA */
+  --accent: 236 96% 67%; /* 6366F1 - keep the same */
+  --accent-foreground: 0 0% 98%; /* FAFAFA */
+  --destructive: 0 62.8% 30.6%; /* 7F1D1D */
+  --destructive-foreground: 0 0% 98%; /* FAFAFA */
+  --ring: 240 4.9% 83.9%; /* D4D4D8 */
   --radius: 0.5rem;
+  --chart-1: 240 5% 25%;
+  --chart-2: 240 5% 35%;
+  --chart-3: 240 5% 45%;
+  --chart-4: 240 5% 55%;
+  --chart-5: 240 5% 65%;
+  /* Keep priority colors bright in dark mode for visibility */
 }
 
+/* Apply to all elements */
 @layer base {
   * {
     @apply border-border;
   }
 
+  html {
+    @apply antialiased;
+  }
+
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
-.task-card {
-  transition: all 0.2s ease-in-out;
+/* Fix dark mode transitions */
+*, *::before, *::after {
+  transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
 }
 
+/* Task Card Styles */
+.task-card {
+  transition: all 0.2s ease-in-out;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Priority colors - ensure they show in dark mode too */
+.priority-high {
+  @apply text-red-600 dark:text-red-400;
+  --priority-color: hsl(var(--priority-high));
+  border-color: var(--priority-color);
+}
+
+.priority-medium {
+  @apply text-amber-600 dark:text-amber-400;
+  --priority-color: hsl(var(--priority-medium));
+  border-color: var(--priority-color);
+}
+
+.priority-low {
+  @apply text-blue-600 dark:text-blue-400;
+  --priority-color: hsl(var(--priority-low));
+  border-color: var(--priority-color);
+}
+
+/* Ensure dark mode properly sets background colors */
+.dark .bg-white {
+  @apply bg-gray-900;
+}
+
+.dark .bg-gray-50 {
+  @apply bg-gray-800;
+}
+
+.dark .bg-gray-100 {
+  @apply bg-gray-800;
+}
+
+.dark .text-gray-900 {
+  @apply text-gray-100;
+}
+
+.dark .text-gray-800 {
+  @apply text-gray-200;
+}
+
+.dark .text-gray-700 {
+  @apply text-gray-300;
+}
+
+.dark .text-gray-600 {
+  @apply text-gray-400;
+}
+
+.dark .border-gray-200 {
+  @apply border-gray-700;
+}
+
+/* Task Card Styles */
 .task-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
+.task-card.border-l-4.border-red-500 {
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.05), 0 2px 4px 0 rgba(239, 68, 68, 0.05);
+}
+
+.task-card.border-l-4.border-yellow-500 {
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.05), 0 2px 4px 0 rgba(245, 158, 11, 0.05);
+}
+
+.task-card.border-l-4.border-blue-500 {
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.05), 0 2px 4px 0 rgba(37, 99, 235, 0.05);
+}
+
+/* Priority Indicator Styles */
 .priority-indicator {
   width: 12px;
   height: 12px;
   border-radius: 50%;
   margin-right: 8px;
+  position: relative;
 }
 
+.priority-indicator.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.priority-indicator.bg-red-500 {
+  background-color: rgb(239 68 68);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+.priority-indicator.bg-yellow-500 {
+  background-color: rgb(245 158 11);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+.priority-indicator.bg-blue-500 {
+  background-color: rgb(37 99 235);
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.5);
+}
+
+/* Category Badge Styles */
 .category-badge {
   font-size: 12px;
   padding: 2px 8px;
   border-radius: 12px;
   font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+/* Mobile Floating Button Styles */
+@media (max-width: 768px) {
+  .fixed.right-6.bottom-6 {
+    filter: drop-shadow(0 4px 6px rgba(37, 99, 235, 0.2));
+    animation: bounce 1s infinite alternate;
+  }
+  
+  @keyframes bounce {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(-6px);
+    }
+  }
 }

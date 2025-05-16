@@ -18,6 +18,11 @@ interface ProcessedTaskResult {
   notes?: string;
 }
 
+/**
+ * Process a task description with OpenRouter AI to extract details
+ * @param taskInput User's task description
+ * @returns Processed task with category, priority, title, etc.
+ */
 export async function processTaskWithAI(taskInput: string): Promise<ProcessedTaskResult> {
   try {
     const apiKey = process.env.OPENROUTER_API_KEY || "";
@@ -28,21 +33,37 @@ export async function processTaskWithAI(taskInput: string): Promise<ProcessedTas
     }
 
     const prompt = `
-      I have a task description: "${taskInput}".
-      Please analyze this and respond with a JSON object that contains:
-      - "category": either "Personal", "Work", or "Important" based on the task content
-      - "priority": either "High", "Medium", or "Low" based on urgency and importance
-      - "title": a concise task title (keep the original wording if it's already concise)
-      - "dueDate": extract any date or time information if present (leave empty if none)
-      - "notes": any additional details or context (leave empty if none)
-      
-      Respond ONLY with the JSON object and nothing else.
+      Analyze this task: "${taskInput}"
+
+      CONTEXT:
+      - Personal tasks: self-improvement, home, family, hobbies, health
+      - Work tasks: job, career, meetings, projects, deadlines
+      - Important tasks: critical deadlines, essential responsibilities, health-related
+
+      DEADLINE ANALYSIS:
+      - Extract ANY date/time references (tomorrow, next week, May 10, etc.)
+      - Convert relative dates to specific format (e.g., "in two days" → "Two days from now")
+      - Detect urgency words (soon, urgent, ASAP)
+
+      PRIORITY SCALE:
+      - High: urgent, critical, immediately needed, time-sensitive
+      - Medium: standard importance, should be done soon but not urgent
+      - Low: can wait, flexible timeline, when convenient
+
+      RESPONSE FORMAT (JSON object only):
+      {
+        "category": "Personal|Work|Important", 
+        "priority": "High|Medium|Low",
+        "title": "Concise title, preserve original wording if already concise",
+        "dueDate": "Extracted date/time reference if present",
+        "notes": "Additional details or context"
+      }
     `;
 
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "meta-llama/llama-3-8b-instruct",
+        model: "mistralai/mistral-7b-instruct",
         messages: [
           { role: "user", content: prompt }
         ]
@@ -65,7 +86,13 @@ export async function processTaskWithAI(taskInput: string): Promise<ProcessedTas
 
     // Try to parse the JSON response
     try {
-      const parsedResult = JSON.parse(content);
+      // Extract JSON object from the content (handling cases where model adds extra text)
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error("No valid JSON object found in response");
+      }
+      
+      const parsedResult = JSON.parse(jsonMatch[0]);
       
       // Validate category and priority
       const category = ensureValidCategory(parsedResult.category);
@@ -80,6 +107,7 @@ export async function processTaskWithAI(taskInput: string): Promise<ProcessedTas
       };
     } catch (parseError) {
       console.error("Failed to parse AI response:", parseError);
+      console.error("Response content:", content);
       return fallbackProcessing(taskInput);
     }
 
@@ -89,17 +117,79 @@ export async function processTaskWithAI(taskInput: string): Promise<ProcessedTas
   }
 }
 
+/**
+ * Generate a concise summary of a task
+ * @param taskDescription The task description to summarize
+ * @returns Summarized version of the task
+ */
+export async function summarizeTask(taskDescription: string): Promise<string> {
+  try {
+    const apiKey = process.env.OPENROUTER_API_KEY || "";
+    
+    if (!apiKey || !taskDescription) {
+      return taskDescription;
+    }
+
+    const prompt = `
+      Summarize this task description into a brief, actionable title (maximum 60 characters):
+      "${taskDescription}"
+      
+      Keep important details about:
+      - What needs to be done
+      - Any critical deadlines
+      - Core purpose/goal
+      
+      RESPOND WITH ONLY THE SUMMARY TEXT, NO QUOTES OR ADDITIONAL TEXT.
+    `;
+
+    const response = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: "mistralai/mistral-7b-instruct",
+        messages: [
+          { role: "user", content: prompt }
+        ],
+        max_tokens: 100
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+          "HTTP-Referer": "https://tasksmart.app"
+        }
+      }
+    );
+
+    const data = response.data as OpenRouterResponse;
+    const content = data.choices[0]?.message?.content?.trim();
+
+    if (!content) {
+      return taskDescription;
+    }
+
+    return content;
+  } catch (error) {
+    console.error("Error summarizing task:", error);
+    // Return original if summarization fails
+    return taskDescription;
+  }
+}
+
 // Fallback processing if API fails
 function fallbackProcessing(taskInput: string): ProcessedTaskResult {
   // Simple heuristics for category
   let category: Category = "Personal";
   if (taskInput.toLowerCase().includes("work") || 
       taskInput.toLowerCase().includes("project") || 
-      taskInput.toLowerCase().includes("report")) {
+      taskInput.toLowerCase().includes("report") ||
+      taskInput.toLowerCase().includes("meeting") ||
+      taskInput.toLowerCase().includes("client")) {
     category = "Work";
   } else if (taskInput.toLowerCase().includes("urgent") || 
             taskInput.toLowerCase().includes("important") || 
-            taskInput.toLowerCase().includes("asap")) {
+            taskInput.toLowerCase().includes("asap") ||
+            taskInput.toLowerCase().includes("critical") ||
+            taskInput.toLowerCase().includes("deadline")) {
     category = "Important";
   }
   
@@ -107,19 +197,36 @@ function fallbackProcessing(taskInput: string): ProcessedTaskResult {
   let priority: Priority = "Medium";
   if (taskInput.toLowerCase().includes("urgent") || 
       taskInput.toLowerCase().includes("asap") || 
-      taskInput.toLowerCase().includes("immediately")) {
+      taskInput.toLowerCase().includes("immediately") ||
+      taskInput.toLowerCase().includes("today") ||
+      taskInput.toLowerCase().includes("critical")) {
     priority = "High";
   } else if (taskInput.toLowerCase().includes("whenever") || 
-            taskInput.toLowerCase().includes("eventually")) {
+            taskInput.toLowerCase().includes("eventually") ||
+            taskInput.toLowerCase().includes("when you can") ||
+            taskInput.toLowerCase().includes("low priority")) {
     priority = "Low";
   }
 
-  // Extract dates (very basic implementation)
+  // Extract dates (more comprehensive implementation)
   let dueDate = "";
-  if (taskInput.toLowerCase().includes("tomorrow")) {
-    dueDate = "Tomorrow";
-  } else if (taskInput.toLowerCase().includes("next week")) {
-    dueDate = "Next Week";
+  const datePatterns = [
+    { pattern: /tomorrow/i, output: "Tomorrow" },
+    { pattern: /next week/i, output: "Next Week" },
+    { pattern: /next month/i, output: "Next Month" },
+    { pattern: /today/i, output: "Today" },
+    { pattern: /this week/i, output: "This Week" },
+    { pattern: /this weekend/i, output: "This Weekend" },
+    { pattern: /\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/, matchAsDueDate: true },
+    { pattern: /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?(?:,? \d{4})?\b/i, matchAsDueDate: true }
+  ];
+
+  for (const { pattern, output, matchAsDueDate } of datePatterns) {
+    const match = taskInput.match(pattern);
+    if (match) {
+      dueDate = matchAsDueDate ? match[0] : output;
+      break;
+    }
   }
 
   return {
