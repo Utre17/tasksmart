@@ -6,6 +6,7 @@ import cors from "cors";
 import tasksRouter from "./api/tasks";
 import usersRouter from "./api/users";
 import { errorHandler } from "./utils/errorHandler";
+import { createServer } from "http";
 
 // Initialize Express app
 const app = express();
@@ -83,8 +84,7 @@ app.use(errorHandler);
 
 (async () => {
   // Create HTTP server
-  const http = require('http');
-  const server = http.createServer(app);
+  const server = createServer(app);
   
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
@@ -98,8 +98,8 @@ app.use(errorHandler);
   // ALWAYS serve the app on port 5000
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = process.env.PORT || 5000;
-  server.listen(port, "127.0.0.1", () => {
+  const port = parseInt(process.env.PORT || "5000", 10);
+  server.listen(port, () => {
     log(`Server running on port ${port} in ${app.get("env")} mode`);
   });
 })();
