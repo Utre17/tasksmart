@@ -1,5 +1,6 @@
 import { eq, and, isNull, desc, sql } from "drizzle-orm";
 import { db } from "./db";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
   tasks,
   users,
@@ -15,30 +16,33 @@ import {
 } from "@shared/schema";
 import { IStorage } from "./storage";
 
+// Type assertion to fix the implicit any type
+const typedDb = db as PostgresJsDatabase;
+
 export class DatabaseStorage implements IStorage {
   // User operations
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+    const [user] = await typedDb.select().from(users).where(eq(users.id, id));
     return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+    const [user] = await typedDb.select().from(users).where(eq(users.username, username));
     return user;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
+    const [user] = await typedDb.select().from(users).where(eq(users.email, email));
     return user;
   }
 
   async getAllUsers(): Promise<User[]> {
-    return await db.select().from(users);
+    return await typedDb.select().from(users);
   }
 
   async createUser(userData: InsertUser): Promise<User> {
     // Firebase Auth handles password, so we don't need to hash it
-    const [user] = await db.insert(users).values({
+    const [user] = await typedDb.insert(users).values({
       ...userData
     }).returning();
 
@@ -49,7 +53,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateUser(id: string, userData: Partial<User>): Promise<User | undefined> {
     // Firebase Auth handles passwords now
-    const [updatedUser] = await db
+    const [updatedUser] = await typedDb
       .update(users)
       .set({
         ...userData,
@@ -63,57 +67,57 @@ export class DatabaseStorage implements IStorage {
 
   // Task operations
   async getAllTasks(): Promise<Task[]> {
-    return await db.select().from(tasks);
+    return await typedDb.select().from(tasks);
   }
 
   async getTasksByUserId(userId: string, completed?: boolean): Promise<Task[]> {
     if (completed !== undefined) {
-      return await db.select().from(tasks).where(
+      return await typedDb.select().from(tasks).where(
         and(
           eq(tasks.userId, userId),
           eq(tasks.completed, completed)
         )
       );
     }
-    return await db.select().from(tasks).where(eq(tasks.userId, userId));
+    return await typedDb.select().from(tasks).where(eq(tasks.userId, userId));
   }
 
   async getTaskById(id: number): Promise<Task | undefined> {
-    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+    const [task] = await typedDb.select().from(tasks).where(eq(tasks.id, id));
     return task;
   }
 
   async getTasksByCategory(category: string, userId?: string): Promise<Task[]> {
     if (userId) {
-      return await db.select().from(tasks).where(
+      return await typedDb.select().from(tasks).where(
         and(
           eq(tasks.category, category),
           eq(tasks.userId, userId)
         )
       );
     }
-    return await db.select().from(tasks).where(eq(tasks.category, category));
+    return await typedDb.select().from(tasks).where(eq(tasks.category, category));
   }
 
   async getTasksByPriority(priority: string, userId?: string): Promise<Task[]> {
     if (userId) {
-      return await db.select().from(tasks).where(
+      return await typedDb.select().from(tasks).where(
         and(
           eq(tasks.priority, priority),
           eq(tasks.userId, userId)
         )
       );
     }
-    return await db.select().from(tasks).where(eq(tasks.priority, priority));
+    return await typedDb.select().from(tasks).where(eq(tasks.priority, priority));
   }
 
   async createTask(taskData: InsertTask): Promise<Task> {
-    const [task] = await db.insert(tasks).values(taskData).returning();
+    const [task] = await typedDb.insert(tasks).values(taskData).returning();
     return task;
   }
 
   async updateTask(id: number, taskUpdate: Partial<InsertTask>): Promise<Task | undefined> {
-    const [updatedTask] = await db
+    const [updatedTask] = await typedDb
       .update(tasks)
       .set({
         ...taskUpdate,
@@ -126,7 +130,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTask(id: number): Promise<boolean> {
-    const [deletedTask] = await db
+    const [deletedTask] = await typedDb
       .delete(tasks)
       .where(eq(tasks.id, id))
       .returning();
@@ -135,7 +139,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async completeTask(id: number, completed: boolean): Promise<Task | undefined> {
-    const [updatedTask] = await db
+    const [updatedTask] = await typedDb
       .update(tasks)
       .set({
         completed,
@@ -150,7 +154,7 @@ export class DatabaseStorage implements IStorage {
   // Analytics methods
   async getTotalTasksByUserId(userId: string): Promise<any[]> {
     try {
-      const result = await db
+      const result = await typedDb
         .select({ count: sql`count(*)` })
         .from(tasks)
         .where(eq(tasks.userId, userId));
@@ -164,7 +168,7 @@ export class DatabaseStorage implements IStorage {
   
   async getCompletedTasksByUserId(userId: string): Promise<any[]> {
     try {
-      const result = await db
+      const result = await typedDb
         .select({ count: sql`count(*)` })
         .from(tasks)
         .where(and(
@@ -181,7 +185,7 @@ export class DatabaseStorage implements IStorage {
   
   async getTasksByPriorityAndUserId(userId: string): Promise<any[]> {
     try {
-      const result = await db
+      const result = await typedDb
         .select({
           priority: tasks.priority,
           count: sql`count(*)`,
@@ -199,7 +203,7 @@ export class DatabaseStorage implements IStorage {
   
   async getAIUsageCountByUserId(userId: string): Promise<any[]> {
     try {
-      const result = await db
+      const result = await typedDb
         .select({ count: sql`count(*)` })
         .from(aiUsage)
         .where(eq(aiUsage.userId, userId));
@@ -213,7 +217,7 @@ export class DatabaseStorage implements IStorage {
   
   async getCompletionRateOverTimeByUserId(userId: string): Promise<any[]> {
     try {
-      const result = await db.execute(sql`
+      const result = await typedDb.execute(sql`
         SELECT date_trunc('day', created_at) as day, 
           COUNT(*) FILTER (WHERE completed = true) as completed_count,
           COUNT(*) as total_count
@@ -243,7 +247,7 @@ export class DatabaseStorage implements IStorage {
   
   async getTasksCompletedByDate(userId: string, timeConstraint: string): Promise<any[]> {
     try {
-      const result = await db.execute(sql`
+      const result = await typedDb.execute(sql`
         SELECT date_trunc('day', created_at) as day, 
           COUNT(*) FILTER (WHERE completed = true) as completed
         FROM tasks
@@ -261,7 +265,7 @@ export class DatabaseStorage implements IStorage {
   
   async getTotalAIUsageByUserId(userId: string): Promise<any[]> {
     try {
-      const result = await db
+      const result = await typedDb
         .select({ count: sql`count(*)` })
         .from(aiUsage)
         .where(eq(aiUsage.userId, userId));
@@ -275,7 +279,7 @@ export class DatabaseStorage implements IStorage {
   
   async getAIUsageByDate(userId: string): Promise<any[]> {
     try {
-      const result = await db.execute(sql`
+      const result = await typedDb.execute(sql`
         SELECT date_trunc('day', created_at) as day, COUNT(*) as count
         FROM ai_usage
         WHERE user_id = ${userId} AND created_at > now() - interval '7 days'
@@ -293,7 +297,7 @@ export class DatabaseStorage implements IStorage {
   // User settings methods
   async getUserById(userId: string): Promise<User | null> {
     try {
-      const [user] = await db
+      const [user] = await typedDb
         .select()
         .from(users)
         .where(eq(users.id, userId));
@@ -307,10 +311,11 @@ export class DatabaseStorage implements IStorage {
   
   async updateUserPassword(userId: string, hashedPassword: string): Promise<any[]> {
     try {
-      const result = await db
+      // Firebase Auth now handles passwords - this method is deprecated
+      console.warn("updateUserPassword is deprecated: Firebase Auth handles password updates");
+      const result = await typedDb
         .update(users)
         .set({ 
-          password: hashedPassword,
           updatedAt: new Date()
         })
         .where(eq(users.id, userId))
@@ -334,7 +339,7 @@ export class DatabaseStorage implements IStorage {
   
   async updateUserPreferences(userId: string, preferences: any): Promise<any[]> {
     try {
-      const result = await db
+      const result = await typedDb
         .update(users)
         .set({ 
           preferences,
@@ -352,7 +357,7 @@ export class DatabaseStorage implements IStorage {
   
   async getUserSessions(userId: string): Promise<any[]> {
     try {
-      const result = await db
+      const result = await typedDb
         .select()
         .from(userSessions)
         .where(eq(userSessions.userId, userId))
@@ -367,7 +372,7 @@ export class DatabaseStorage implements IStorage {
   
   async getUserLastLogin(userId: string): Promise<Date | null> {
     try {
-      const result = await db
+      const result = await typedDb
         .select({ lastLogin: users.lastLogin })
         .from(users)
         .where(eq(users.id, userId))
@@ -382,7 +387,7 @@ export class DatabaseStorage implements IStorage {
   
   async deleteUserSession(userId: string, sessionId: string): Promise<any[]> {
     try {
-      const result = await db
+      const result = await typedDb
         .delete(userSessions)
         .where(and(
           eq(userSessions.userId, userId),
@@ -400,19 +405,22 @@ export class DatabaseStorage implements IStorage {
   // DEBUG ONLY - Remove in production
   async createTestAdmin(): Promise<User | undefined> {
     try {
-      // Use a pre-generated hash instead of generating a new one each time
-      // This is a known hash for "Admin123!"
-      const knownPasswordHash = "$2b$10$C/QSnpSR7S7K7EVVFDxWc.qctmtP1XQmhEOZcyS1KgNkykJsXSoEC";
+      // Since we're using Firebase Auth, we don't need to store passwords
+      const adminUser: InsertUser = {
+        email: "admin@test.com",
+        username: "testadmin",
+        password: "firebase-auth-handles-passwords", // Required by schema but not used
+        firstName: "Test",
+        lastName: "Admin"
+      };
       
       // Check if test admin already exists
       const existingAdmin = await this.getUserByEmail("admin@test.com");
       if (existingAdmin) {
         console.log("[DEBUG] Test admin already exists");
-        // Use the known hash directly
-        const [updatedUser] = await db
+        const [updatedUser] = await typedDb
           .update(users)
           .set({
-            password: knownPasswordHash,
             updatedAt: new Date()
           })
           .where(eq(users.id, existingAdmin.id))
@@ -422,25 +430,14 @@ export class DatabaseStorage implements IStorage {
       }
       
       // Create new test admin
-      const adminUser: InsertUser = {
-        email: "admin@test.com",
-        username: "testadmin",
-        password: "not-used", // This will be replaced with knownPasswordHash
-        firstName: "Test",
-        lastName: "Admin"
-      };
-      
-      // Insert with the known hash
-      const [createdUser] = await db.insert(users).values({
+      const [createdUser] = await typedDb.insert(users).values({
         ...adminUser,
-        password: knownPasswordHash,
         role: "admin"
       }).returning();
       
       console.log("[DEBUG] Created test admin account:", { 
         email: createdUser.email,
-        username: createdUser.username,
-        password: "Admin123!" // The password corresponding to the hash
+        username: createdUser.username
       });
       
       return createdUser;

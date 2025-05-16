@@ -93,9 +93,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.use("/tasks", tasksRouter);
 
   // Get all tasks for the current user
-  tasksRouter.get("/", verifyFirebaseToken, async (req: any, res: Response) => {
+  tasksRouter.get("/", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user!.uid;
       const tasks = await storage.getTasksByUserId(userId);
       return res.json(tasks);
     } catch (error) {
@@ -105,10 +105,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get tasks by category for the current user
-  tasksRouter.get("/category/:category", verifyFirebaseToken, async (req: any, res: Response) => {
+  tasksRouter.get("/category/:category", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
       const { category } = req.params;
-      const userId = req.user.id;
+      const userId = req.user!.uid;
       const tasks = await storage.getTasksByCategory(category, userId);
       return res.json(tasks);
     } catch (error) {
@@ -118,10 +118,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get tasks by priority for the current user
-  tasksRouter.get("/priority/:priority", verifyFirebaseToken, async (req: any, res: Response) => {
+  tasksRouter.get("/priority/:priority", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
       const { priority } = req.params;
-      const userId = req.user.id;
+      const userId = req.user!.uid;
       const tasks = await storage.getTasksByPriority(priority, userId);
       return res.json(tasks);
     } catch (error) {
@@ -131,7 +131,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get task by ID (check ownership)
-  tasksRouter.get("/:id", verifyFirebaseToken, async (req: any, res: Response) => {
+  tasksRouter.get("/:id", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
@@ -144,7 +144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if the task belongs to the user
-      if (task.userId && task.userId !== req.user.id) {
+      if (task.userId && task.userId !== req.user!.uid) {
         return res.status(403).json({ message: "You don't have permission to access this task" });
       }
 
@@ -156,7 +156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get AI task suggestions (enhanced)
-  tasksRouter.post("/suggestions", verifyFirebaseToken, async (req: any, res: Response) => {
+  tasksRouter.post("/suggestions", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
       const validatedData = taskSuggestionSchema.parse(req.body);
       const suggestions = await enhanceAICapabilities.generateTaskSuggestions(
@@ -175,7 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create task with natural language processing
-  tasksRouter.post("/process", verifyFirebaseToken, async (req: any, res: Response) => {
+  tasksRouter.post("/process", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
       const validatedData = naturalLanguageInputSchema.parse(req.body);
       const processedTask = await processTaskWithAI(validatedData.input);
@@ -187,7 +187,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dueDate: processedTask.dueDate,
         notes: processedTask.notes,
         completed: false,
-        userId: req.user.id
+        userId: req.user!.uid
       });
 
       return res.status(201).json(newTask);
@@ -201,7 +201,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Summarize task description (AI enhancement)
-  tasksRouter.post("/summarize", verifyFirebaseToken, async (req: any, res: Response) => {
+  tasksRouter.post("/summarize", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
       const { text } = req.body;
       if (!text || typeof text !== "string") {
@@ -230,9 +230,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create task (manual)
-  tasksRouter.post("/", verifyFirebaseToken, async (req: any, res: Response) => {
+  tasksRouter.post("/", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
-      const taskData = { ...req.body, userId: req.user.id };
+      const taskData = { ...req.body, userId: req.user!.uid };
       const validatedData = insertTaskSchema.parse(taskData);
       const newTask = await storage.createTask(validatedData);
       return res.status(201).json(newTask);
@@ -246,7 +246,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update task (check ownership)
-  tasksRouter.patch("/:id", verifyFirebaseToken, async (req: any, res: Response) => {
+  tasksRouter.patch("/:id", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
@@ -259,7 +259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if the task belongs to the user
-      if (existingTask.userId && existingTask.userId !== req.user.id) {
+      if (existingTask.userId && existingTask.userId !== req.user!.uid) {
         return res.status(403).json({ message: "You don't have permission to update this task" });
       }
 
@@ -279,7 +279,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Toggle task completion (check ownership)
-  tasksRouter.patch("/:id/complete", verifyFirebaseToken, async (req: any, res: Response) => {
+  tasksRouter.patch("/:id/complete", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
@@ -292,7 +292,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if the task belongs to the user
-      if (existingTask.userId && existingTask.userId !== req.user.id) {
+      if (existingTask.userId && existingTask.userId !== req.user!.uid) {
         return res.status(403).json({ message: "You don't have permission to update this task" });
       }
 
@@ -310,7 +310,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete task (check ownership)
-  tasksRouter.delete("/:id", verifyFirebaseToken, async (req: any, res: Response) => {
+  tasksRouter.delete("/:id", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
@@ -323,7 +323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if the task belongs to the user
-      if (existingTask.userId && existingTask.userId !== req.user.id) {
+      if (existingTask.userId && existingTask.userId !== req.user!.uid) {
         return res.status(403).json({ message: "You don't have permission to delete this task" });
       }
 
@@ -336,9 +336,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Clear all completed tasks for the current user
-  tasksRouter.delete("/completed", verifyFirebaseToken, async (req: any, res: Response) => {
+  tasksRouter.delete("/completed", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user!.uid;
       
       // Get all completed tasks for the user
       const completedTasks = await storage.getTasksByUserId(userId, true);
@@ -380,10 +380,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a development user for testing
   apiRouter.post("/dev/create-user", async (req: Request, res: Response) => {
     try {
-      // Firebase Auth handles password management now
+      // Firebase Auth handles password management now, but our schema still requires it
       const user = await storage.createUser({
         email: "test@example.com",
         username: "testuser",
+        password: "firebase-auth-handles-passwords", // Dummy value since the schema requires it
         firstName: "Test",
         lastName: "User"
       });
@@ -462,9 +463,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Analytics routes
-  apiRouter.get("/analytics/user", verifyFirebaseToken, async (req, res) => {
+  apiRouter.get("/analytics/user", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
-      const userId = req.user.id;
+      // We can safely use req.user here because verifyFirebaseToken ensures it exists
+      const userId = req.user!.uid; // Use uid which is guaranteed by Firebase Auth
       
       // Get total tasks
       const totalTasksQuery = await storage.getTotalTasksByUserId(userId);
@@ -508,9 +510,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.get("/analytics/tasks/completion", verifyFirebaseToken, async (req, res) => {
+  apiRouter.get("/analytics/tasks/completion", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user!.uid;
       
       // Get completion rate over time
       const completionRateQuery = await storage.getCompletionRateOverTimeByUserId(userId);
@@ -529,9 +531,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.get("/analytics/tasks/by-date", verifyFirebaseToken, async (req, res) => {
+  apiRouter.get("/analytics/tasks/by-date", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user!.uid;
       const period = req.query.period as string || "week";
       
       let timeConstraint = storage.getTimeConstraint(period);
@@ -555,9 +557,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.get("/analytics/ai-usage", verifyFirebaseToken, async (req, res) => {
+  apiRouter.get("/analytics/ai-usage", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user!.uid;
       
       // Get total AI usage
       const totalUsageQuery = await storage.getTotalAIUsageByUserId(userId);
@@ -598,9 +600,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.patch("/auth/preferences", verifyFirebaseToken, async (req, res) => {
+  apiRouter.patch("/auth/preferences", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user!.uid;
       const preferences = req.body;
       
       // Validate preferences with zod schema
@@ -630,9 +632,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.get("/auth/sessions", verifyFirebaseToken, async (req, res) => {
+  apiRouter.get("/auth/sessions", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user!.uid;
       
       // Get user sessions
       const sessions = await storage.getUserSessions(userId);
@@ -656,9 +658,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.delete("/auth/sessions/:sessionId", verifyFirebaseToken, async (req, res) => {
+  apiRouter.delete("/auth/sessions/:sessionId", verifyFirebaseToken, async (req: Request, res: Response) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user!.uid;
       const sessionId = req.params.sessionId;
       
       // Delete the session
