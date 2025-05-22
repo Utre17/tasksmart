@@ -8,6 +8,7 @@ import {
   type UserPreferences
 } from "@shared/schema";
 import { dbStorage } from "./db-storage";
+import { StorageWrapper } from "./storage-wrapper";
 
 export interface IStorage {
   // User operations
@@ -68,6 +69,7 @@ export class MemStorage implements IStorage {
         category: "Personal",
         priority: "Medium",
         dueDate: "Tomorrow, 5:00 PM",
+        userId: "sample-user"
       },
       {
         title: "Prepare quarterly report for management review",
@@ -75,7 +77,8 @@ export class MemStorage implements IStorage {
         category: "Work",
         priority: "High",
         dueDate: "Oct 15, 2023",
-        notes: "Include sales figures, customer feedback, and projections for Q4"
+        notes: "Include sales figures, customer feedback, and projections for Q4",
+        userId: "sample-user"
       },
       {
         title: "Book dentist appointment for next week",
@@ -83,6 +86,7 @@ export class MemStorage implements IStorage {
         category: "Personal",
         priority: "Low",
         dueDate: "Next Week",
+        userId: "sample-user"
       },
       {
         title: "Submit proposal for the new client project",
@@ -90,6 +94,7 @@ export class MemStorage implements IStorage {
         category: "Work",
         priority: "High",
         dueDate: "Oct 10, 2023",
+        userId: "sample-user"
       },
       {
         title: "Order groceries for the week",
@@ -97,6 +102,7 @@ export class MemStorage implements IStorage {
         category: "Personal",
         priority: "Medium",
         dueDate: "",
+        userId: "sample-user"
       }
     ];
 
@@ -139,7 +145,9 @@ export class MemStorage implements IStorage {
       profileImageUrl: null,
       role: "user", // Default role
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      preferences: {},
+      lastLogin: null
     };
     this.users.set(id, user);
     return user;
@@ -201,7 +209,7 @@ export class MemStorage implements IStorage {
     const task: Task = { 
       ...insertTask, 
       id, 
-      userId: insertTask.userId || null,
+      userId: insertTask.userId || "",
       completed: insertTask.completed || false,
       dueDate: insertTask.dueDate || null,
       notes: insertTask.notes || null,
@@ -315,7 +323,7 @@ export class MemStorage implements IStorage {
     const user = this.users.get(userId);
     if (!user) return [];
     
-    user.preferences = { ...user.preferences, ...preferences };
+    user.preferences = { ...(user.preferences || {}), ...preferences };
     user.updatedAt = new Date();
     
     return [user];
@@ -335,7 +343,5 @@ export class MemStorage implements IStorage {
   }
 }
 
-// Determine which storage to use
-// For now, use in-memory storage to ensure the app works while we develop the database integration
-const memStorage = new MemStorage();
-export const storage = dbStorage;
+// Create a wrapped storage instance that handles Firebase UID to UUID conversion
+export const storage = new StorageWrapper(dbStorage);

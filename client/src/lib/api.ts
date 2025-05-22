@@ -1,18 +1,56 @@
 import axios from "axios";
 import { Task, InsertTask, LoginUser, InsertUser } from "@shared/schema";
+import { apiCall, ApiResponse, ApiError } from "./errorHandler";
 
-// Configure axios with interceptors for error handling
+// Create a custom APIError class for consistent error handling
+class APIError extends Error {
+  status: number;
+  data: any;
+  
+  constructor(message: string, status: number, data?: any) {
+    super(message);
+    this.name = 'APIError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
+// Configure axios with enhanced interceptors for error handling
 axios.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Only redirect to login page if not already on the auth page
-      localStorage.removeItem("token");
-      if (window.location.pathname !== "/auth") {
-        window.location.href = "/auth";
+    // Create standardized error format
+    const status = error.response?.status || 500;
+    const message = error.response?.data?.message || error.message || 'Unknown error occurred';
+    const data = error.response?.data || {};
+    
+    // Authentication specific error handling
+    if (status === 401) {
+      console.warn("Authentication error:", message);
+      
+      // Only clear token if it's a genuine auth error (not just missing token)
+      const isTokenError = 
+        message.includes("token") || 
+        message.includes("auth") || 
+        message.includes("unauthorized") ||
+        message.toLowerCase().includes("invalid");
+      
+      if (isTokenError) {
+        console.log("Clearing invalid auth token");
+        localStorage.removeItem("token");
+      }
+      
+      // Only redirect if not on auth page and not a background check
+      const isAuthRequest = error.config.url?.includes('/api/auth/');
+      const isVerifyRequest = error.config.url?.includes('/verify');
+      
+      if (window.location.pathname !== "/auth" && !isAuthRequest && !isVerifyRequest) {
+        console.log("Redirecting to auth page due to auth error");
+        window.location.href = "/auth?reason=session_expired";
       }
     }
-    return Promise.reject(error);
+    
+    return Promise.reject(new APIError(message, status, data));
   }
 );
 
@@ -40,30 +78,53 @@ const api = {
 
   // Authentication
   register: async (userData: Omit<InsertUser, "id">): Promise<any> => {
-    const response = await axios.post("/api/auth/register", userData);
-    // Set token if returned
-    if (response.data.token) {
-      localStorage.setItem("token", response.data.token);
-      setAuthHeader();
+    try {
+      const result = await apiCall(axios.post("/api/auth/register", userData));
+      if (!result.isSuccess || !result.data) {
+        throw result.error;
+      }
+      
+      // Set token if returned
+      if (result.data.token) {
+        localStorage.setItem("token", result.data.token);
+        setAuthHeader();
+      }
+      return result.data;
+    } catch (error) {
+      console.error("Registration error:", error);
+      throw error;
     }
-    return response.data;
   },
 
   login: async (credentials: LoginUser): Promise<any> => {
-    const response = await axios.post("/api/auth/login", credentials);
-    // Set token in local storage
-    if (response.data.token) {
-      localStorage.setItem("token", response.data.token);
-      setAuthHeader();
+    try {
+      const result = await apiCall(axios.post("/api/auth/login", credentials));
+      if (!result.isSuccess || !result.data) {
+        throw result.error;
+      }
+      
+      // Set token in local storage
+      if (result.data.token) {
+        localStorage.setItem("token", result.data.token);
+        setAuthHeader();
+      } else {
+        throw new APIError("Login successful but no token returned", 500);
+      }
+      return result.data;
+    } catch (error) {
+      console.error("Login error:", error);
+      throw error;
     }
-    return response.data;
   },
 
   // Verify Firebase token with backend
   loginWithToken: async (token: string): Promise<any> => {
     try {
-      const response = await axios.post("/api/auth/login", { token });
-      return response.data;
+      const result = await apiCall(axios.post("/api/auth/login", { token }));
+      if (!result.isSuccess) {
+        throw result.error;
+      }
+      return result.data;
     } catch (error) {
       console.error("Error verifying token with backend:", error);
       throw error;
@@ -184,13 +245,29 @@ const api = {
     if (isAuthPage()) {
       return [];
     }
-    const response = await axios.get("/api/tasks");
-    return response.data;
+    try {
+      const result = await apiCall(axios.get("/api/tasks"));
+      if (!result.isSuccess) {
+        throw result.error;
+      }
+      return result.data;
+    } catch (error) {
+      console.error("Error fetching tasks:", error);
+      throw error;
+    }
   },
 
   getTaskById: async (id: number): Promise<Task> => {
-    const response = await axios.get(`/api/tasks/${id}`);
-    return response.data;
+    try {
+      const result = await apiCall(axios.get(`/api/tasks/${id}`));
+      if (!result.isSuccess) {
+        throw result.error;
+      }
+      return result.data;
+    } catch (error) {
+      console.error("Error fetching task:", error);
+      throw error;
+    }
   },
 
   getTasksByCategory: async (category: string): Promise<Task[]> => {
@@ -204,8 +281,27 @@ const api = {
   },
 
   processTask: async (input: string): Promise<Task> => {
-    const response = await axios.post("/api/tasks/process", { input });
-    return response.data;
+    try {
+      const response = await axios.post("/api/tasks/process", { input });
+      return response.data;
+    } catch (error) {
+      console.error("Error processing task with AI:", error);
+      
+      // Fallback: Create a basic task if the AI processing fails
+      const fallbackTask = {
+        title: input.length > 50 ? input.substring(0, 47) + '...' : input,
+        description: input,
+        category: 'Personal',
+        priority: 'Medium',
+        dueDate: null,
+        completed: false
+      };
+      
+      // Log the fallback action
+      console.log("Using fallback task creation instead of AI processing");
+      
+      return fallbackTask as Task;
+    }
   },
 
   summarizeTask: async (text: string): Promise<{ summary: string; note?: string }> => {
@@ -222,13 +318,29 @@ const api = {
   },
 
   createTask: async (task: Partial<InsertTask>): Promise<Task> => {
-    const response = await axios.post("/api/tasks", task);
-    return response.data;
+    try {
+      const result = await apiCall(axios.post("/api/tasks", task));
+      if (!result.isSuccess) {
+        throw result.error;
+      }
+      return result.data;
+    } catch (error) {
+      console.error("Error creating task:", error);
+      throw error;
+    }
   },
 
   updateTask: async (id: number, task: Partial<InsertTask>): Promise<Task> => {
-    const response = await axios.patch(`/api/tasks/${id}`, task);
-    return response.data;
+    try {
+      const result = await apiCall(axios.patch(`/api/tasks/${id}`, task));
+      if (!result.isSuccess) {
+        throw result.error;
+      }
+      return result.data;
+    } catch (error) {
+      console.error("Error updating task:", error);
+      throw error;
+    }
   },
 
   completeTask: async (id: number, completed: boolean): Promise<Task> => {

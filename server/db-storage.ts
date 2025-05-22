@@ -15,9 +15,11 @@ import {
   type UserPreferences
 } from "@shared/schema";
 import { IStorage } from "./storage";
+import * as schema from "@shared/schema";
 
 // Type assertion to fix the implicit any type
-const typedDb = db as PostgresJsDatabase;
+// Using Record<string, any> to bridge the type gap between our custom db implementation and PostgresJsDatabase
+const typedDb = db as unknown as PostgresJsDatabase<typeof schema>;
 
 export class DatabaseStorage implements IStorage {
   // User operations

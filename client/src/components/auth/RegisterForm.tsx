@@ -32,11 +32,12 @@ interface RegisterFormProps {
 }
 
 export default function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
-  const { register, loginWithGoogle, isGuest } = useAuth();
+  const { register, loginWithGoogle, loginWithGoogleRedirect, isGuest } = useAuth();
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transferTasks, setTransferTasks] = useState(true);
   const [guestTaskCount, setGuestTaskCount] = useState(0);
+  const [showDirectLogin, setShowDirectLogin] = useState(true);
 
   // Check for guest tasks to transfer
   useEffect(() => {
@@ -88,8 +89,29 @@ export default function RegisterForm({ onSuccess, onLoginClick }: RegisterFormPr
       await loginWithGoogle();
       if (onSuccess) onSuccess();
     } catch (error: any) {
-      setError(error.message || "Google sign up failed");
+      console.error("Google signup error:", error);
+      
+      if (error.code === 'auth/popup-closed-by-user') {
+        setError("The signup popup was closed. Please try again or use the redirect method.");
+      } else if (error.code === 'auth/popup-blocked') {
+        setError("Popup was blocked by your browser. Please allow popups for this site or try the redirect method.");
+      } else {
+        setError(error.message || "Google sign up failed. Please try again or use email registration.");
+      }
     } finally {
+      setIsRegistering(false);
+    }
+  };
+  
+  const handleGoogleRedirect = async () => {
+    setError(null);
+    setIsRegistering(true);
+    
+    try {
+      await loginWithGoogleRedirect();
+      // No need to call onSuccess here as the redirect will navigate away
+    } catch (err: any) {
+      setError(err.message || "Failed to start Google redirect authentication");
       setIsRegistering(false);
     }
   };
@@ -271,11 +293,34 @@ export default function RegisterForm({ onSuccess, onLoginClick }: RegisterFormPr
             </div>
           </div>
           
+          {showDirectLogin && (
+            <div className="mb-4 mt-4 p-3 border border-blue-200 rounded-md bg-blue-50">
+              <p className="text-sm text-blue-700 font-medium">
+                ⚠️ Having trouble signing up? Try the direct method:
+              </p>
+              <Button 
+                variant="default" 
+                className="w-full mt-2 bg-blue-600 hover:bg-blue-700 flex items-center justify-center"
+                onClick={() => loginWithGoogleRedirect()}
+                type="button"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 48 48" className="mr-2">
+                  <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
+                  <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
+                  <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
+                  <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
+                </svg>
+                Sign up with Google (Direct Method)
+              </Button>
+            </div>
+          )}
+          
           <Button 
             variant="outline" 
             className="w-full mt-6 border-gray-300 hover:bg-gray-50 flex items-center justify-center"
             onClick={handleGoogleSignup}
             type="button"
+            disabled={isRegistering}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 48 48">
               <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
@@ -283,7 +328,7 @@ export default function RegisterForm({ onSuccess, onLoginClick }: RegisterFormPr
               <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
               <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
             </svg>
-            <span className="ml-2">Google</span>
+            <span className="ml-2">Sign up with Google</span>
           </Button>
         </div>
       </CardContent>

@@ -3,12 +3,17 @@ import {
   onAuthStateChanged, 
   signOut, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
   UserCredential,
-  User as FirebaseUser
+  User as FirebaseUser,
+  browserPopupRedirectResolver,
+  browserLocalPersistence,
+  setPersistence
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +32,7 @@ interface AuthContextType {
   hasRole: (role: string) => boolean;
   login: (email: string, password: string) => Promise<UserCredential>;
   loginWithGoogle: () => Promise<UserCredential>;
+  loginWithGoogleRedirect: () => Promise<void>;
   register: (email: string, password: string, username: string, firstName?: string, lastName?: string) => Promise<UserCredential>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -42,6 +48,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { toast } = useToast();
   
   const isGuest = guestStorage.isGuestMode();
+  
+  // Near the top of the file, add a state variable to track popup failures
+  const [popupFailed, setPopupFailed] = useState<boolean>(false);
   
   // Listen for Firebase auth state changes
   useEffect(() => {
@@ -121,27 +130,200 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
   
-  // Login with Google
+  // Check for redirect result on initial load
+  useEffect(() => {
+    async function checkRedirectResult() {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          // User successfully authenticated with redirect
+          const credential = GoogleAuthProvider.credentialFromResult(result);
+          const token = credential?.idToken;
+          
+          // Store email for future login hints
+          if (result.user?.email) {
+            localStorage.setItem('lastLoginEmail', result.user.email);
+          }
+          
+          // If we have a token, verify it with our backend
+          if (token) {
+            try {
+              await api.loginWithToken(token);
+              toast({
+                title: "Login successful",
+                description: "Welcome via Google!",
+              });
+            } catch (backendError) {
+              console.error("Backend verification failed after redirect:", backendError);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error processing redirect result:", error);
+      }
+    }
+    
+    checkRedirectResult();
+  }, []);
+  
+  // Function to check if the browser is likely to have popup issues
+  const browserMayBlockPopups = () => {
+    // Check if we're on a mobile device
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    // Check if we've had popup issues before in this session
+    const hadPopupIssues = localStorage.getItem('hadPopupIssues') === 'true';
+    
+    // Check if we're in an iframe
+    const isInIframe = window !== window.top;
+    
+    return isMobile || hadPopupIssues || isInIframe || popupFailed;
+  };
+  
+  // Login with Google using popup
   const loginWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
+    
+    // Add scopes for additional permissions if needed
+    provider.addScope('profile');
+    provider.addScope('email');
+    
+    // Set custom parameters for the auth provider
+    provider.setCustomParameters({
+      prompt: 'select_account',
+      // Add additional parameters that can help with popup issues
+      login_hint: localStorage.getItem('lastLoginEmail') || undefined
+    });
+    
+    // If we think popups will be blocked, go straight to redirect method
+    if (browserMayBlockPopups()) {
+      console.log("Popup may be blocked, using redirect method directly");
+      return loginWithGoogleRedirect();
+    }
+    
     try {
-      const result = await signInWithPopup(auth, provider);
+      // Set persistence to LOCAL to persist the user session
+      await setPersistence(auth, browserLocalPersistence);
       
-      // Check if this is a new user and create profile in our backend if needed
-      // This could be handled by a Cloud Function in Firebase or here
+      // Use the explicit resolver to help with popup issues
+      const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+      
+      // Get credentials from result
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential?.idToken;
+      
+      // Store email for future login hints
+      if (result.user?.email) {
+        localStorage.setItem('lastLoginEmail', result.user.email);
+      }
+      
+      // If we have a token, verify it with our backend
+      if (token) {
+        try {
+          // Verify token with backend
+          await api.loginWithToken(token);
+        } catch (backendError) {
+          console.error("Backend verification failed:", backendError);
+          // Continue anyway since Firebase auth succeeded
+        }
+      }
       
       toast({
         title: "Login successful",
         description: "Welcome via Google!",
       });
       
+      // Reset popup failure flag since it worked
+      localStorage.removeItem('hadPopupIssues');
+      setPopupFailed(false);
+      
       return result;
     } catch (error: any) {
+      // Remember that we've had popup issues
+      if (error.code?.includes('popup')) {
+        localStorage.setItem('hadPopupIssues', 'true');
+        setPopupFailed(true);
+        
+        // Automatically use redirect instead
+        console.log("Popup failed, automatically falling back to redirect method");
+        return loginWithGoogleRedirect();
+      }
+      
+      // Handle other specific Firebase Auth errors
+      if (error.code === 'auth/popup-closed-by-user') {
+        toast({
+          title: "Google login cancelled",
+          description: "You closed the login window. Trying redirect method instead.",
+          variant: "default",
+        });
+        
+        // Automatically try redirect method
+        return loginWithGoogleRedirect();
+      } else if (error.code === 'auth/popup-blocked') {
+        toast({
+          title: "Popup blocked",
+          description: "Trying redirect method instead.",
+          variant: "destructive",
+        });
+        
+        // Suggest enabling popups
+        console.warn("Google login popup was blocked. Using redirect method instead.");
+        return loginWithGoogleRedirect();
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        // This is normal when multiple popups are attempted, so just log it
+        console.log("Multiple popup requests detected and handled");
+        return loginWithGoogleRedirect();
+      } else if (error.code === 'auth/network-request-failed') {
+        toast({
+          title: "Network error",
+          description: "Check your internet connection and try again.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Google login failed",
+          description: error.message || "Could not sign in with Google",
+          variant: "destructive",
+        });
+      }
+      
+      console.error("Google auth error:", error.code, error.message);
+      throw error;
+    }
+  };
+  
+  // Login with Google using redirect (more reliable but less immediate feedback)
+  const loginWithGoogleRedirect = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      
+      // Add scopes for additional permissions if needed
+      provider.addScope('profile');
+      provider.addScope('email');
+      
+      // Set custom parameters
+      provider.setCustomParameters({
+        prompt: 'select_account',
+        login_hint: localStorage.getItem('lastLoginEmail') || undefined
+      });
+      
+      // Set persistence to LOCAL to persist the user session
+      await setPersistence(auth, browserLocalPersistence);
+      
+      // Use redirect method (more reliable in problematic browsers/environments)
+      await signInWithRedirect(auth, provider);
+      
+      // The result will be handled in the useEffect hook that checks for redirect results
+      return Promise.resolve() as any;
+    } catch (error: any) {
+      console.error("Error initiating Google redirect auth:", error);
+      
       toast({
         title: "Google login failed",
-        description: error.message || "Could not sign in with Google",
+        description: "Could not initiate Google login. Please try again later.",
         variant: "destructive",
       });
+      
       throw error;
     }
   };
@@ -295,6 +477,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hasRole,
         login,
         loginWithGoogle,
+        loginWithGoogleRedirect,
         register,
         logout,
         resetPassword,

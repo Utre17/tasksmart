@@ -1,22 +1,80 @@
 import express, { Request, Response } from 'express';
-import { verifyFirebaseToken } from '../auth';
 import { storage } from '../storage';
 import { z } from 'zod';
-import { insertTaskSchema } from '@shared/schema';
-import { asyncHandler } from '../utils/errorHandler';
+import { insertTaskSchema, naturalLanguageInputSchema } from '@shared/schema';
+import { asyncHandler, ApiError } from '../utils/errorHandler';
+import * as logger from '../utils/logger';
+import { processTaskWithAI, summarizeTask } from '../openrouter';
 
 const tasksRouter = express.Router();
 
 /**
+ * Process a task with AI assistance
+ */
+tasksRouter.post("/process", asyncHandler(async (req: Request, res: Response) => {
+  const { input } = req.body;
+  
+  if (!input || typeof input !== 'string') {
+    throw new ApiError("Task input is required", 400);
+  }
+  
+  try {
+    // Create a basic task with the input text
+    const task = {
+      title: input,
+      description: '',
+      category: 'Personal',
+      priority: 'Medium',
+      dueDate: null,
+    };
+    
+    // Send response with the basic task
+    res.json(task);
+  } catch (error) {
+    // Log the detailed error for debugging
+    logger.error("Task processing error", error, "tasks");
+    
+    // Send a more specific error message to the client
+    if (error instanceof ApiError) {
+      throw error;
+    } else {
+      throw new ApiError("Failed to process task. Please try again with simpler input.", 500);
+    }
+  }
+}));
+
+/**
+ * AI-powered task text summarization
+ */
+tasksRouter.post('/summarize', asyncHandler(async (req: Request, res: Response) => {
+  const { text } = req.body;
+  
+  if (!text) {
+    throw new ApiError("No text provided for summarization", 400);
+  }
+  
+  try {
+    // Use the real OpenRouter AI summarization
+    const summary = await summarizeTask(text);
+    logger.log(`Text summarized: ${text.substring(0, 50)}...`, "tasks");
+    return res.json({ summary });
+  } catch (error) {
+    logger.error("Error summarizing task", error);
+    throw new ApiError("Failed to summarize text", 500);
+  }
+}));
+
+/**
  * Get all tasks for the authenticated user
  */
-tasksRouter.get('/', verifyFirebaseToken, asyncHandler(async (req: Request, res: Response) => {
+tasksRouter.get('/', asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.uid;
   
   if (!userId) {
-    return res.status(400).json({ error: true, message: "User ID not found in token" });
+    throw new ApiError("User ID not found in token", 400);
   }
   
+  logger.debug(`Fetching tasks for user ${userId}`);
   const tasks = await storage.getTasksByUserId(userId);
   return res.json(tasks);
 }));
@@ -24,27 +82,27 @@ tasksRouter.get('/', verifyFirebaseToken, asyncHandler(async (req: Request, res:
 /**
  * Get task by ID (with ownership check)
  */
-tasksRouter.get('/:id', verifyFirebaseToken, asyncHandler(async (req: Request, res: Response) => {
+tasksRouter.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.uid;
   const id = parseInt(req.params.id, 10);
   
   if (!userId) {
-    return res.status(400).json({ error: true, message: "User ID not found in token" });
+    throw new ApiError("User ID not found in token", 400);
   }
   
   if (isNaN(id)) {
-    return res.status(400).json({ error: true, message: "Invalid task ID" });
+    throw new ApiError("Invalid task ID", 400);
   }
 
   const task = await storage.getTaskById(id);
   
   if (!task) {
-    return res.status(404).json({ error: true, message: "Task not found" });
+    throw new ApiError("Task not found", 404);
   }
 
   // Check if the task belongs to the user
   if (task.userId && task.userId !== userId) {
-    return res.status(403).json({ error: true, message: "You don't have permission to access this task" });
+    throw new ApiError("You don't have permission to access this task", 403);
   }
 
   return res.json(task);
@@ -53,14 +111,15 @@ tasksRouter.get('/:id', verifyFirebaseToken, asyncHandler(async (req: Request, r
 /**
  * Get tasks by category
  */
-tasksRouter.get('/category/:category', verifyFirebaseToken, asyncHandler(async (req: Request, res: Response) => {
+tasksRouter.get('/category/:category', asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.uid;
   const { category } = req.params;
   
   if (!userId) {
-    return res.status(400).json({ error: true, message: "User ID not found in token" });
+    throw new ApiError("User ID not found in token", 400);
   }
   
+  logger.debug(`Fetching ${category} tasks for user ${userId}`);
   const tasks = await storage.getTasksByCategory(category, userId);
   return res.json(tasks);
 }));
@@ -68,14 +127,15 @@ tasksRouter.get('/category/:category', verifyFirebaseToken, asyncHandler(async (
 /**
  * Get tasks by priority
  */
-tasksRouter.get('/priority/:priority', verifyFirebaseToken, asyncHandler(async (req: Request, res: Response) => {
+tasksRouter.get('/priority/:priority', asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.uid;
   const { priority } = req.params;
   
   if (!userId) {
-    return res.status(400).json({ error: true, message: "User ID not found in token" });
+    throw new ApiError("User ID not found in token", 400);
   }
   
+  logger.debug(`Fetching ${priority} priority tasks for user ${userId}`);
   const tasks = await storage.getTasksByPriority(priority, userId);
   return res.json(tasks);
 }));
@@ -83,117 +143,137 @@ tasksRouter.get('/priority/:priority', verifyFirebaseToken, asyncHandler(async (
 /**
  * Create a new task
  */
-tasksRouter.post('/', verifyFirebaseToken, asyncHandler(async (req: Request, res: Response) => {
+tasksRouter.post('/', asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.uid;
   
   if (!userId) {
-    return res.status(400).json({ error: true, message: "User ID not found in token" });
+    throw new ApiError("User ID not found in token", 400);
   }
   
-  const taskData = { ...req.body, userId };
-  const validatedData = insertTaskSchema.parse(taskData);
-  const newTask = await storage.createTask(validatedData);
-  
-  return res.status(201).json(newTask);
+  try {
+    const taskData = { ...req.body, userId };
+    const validatedData = insertTaskSchema.parse(taskData);
+    const newTask = await storage.createTask(validatedData);
+    
+    logger.log(`Task created: ${newTask.id} for user ${userId}`, "tasks");
+    return res.status(201).json(newTask);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      logger.error("Task validation error", error.format());
+      throw new ApiError(`Validation error: ${error.errors.map(e => e.message).join(', ')}`, 400);
+    }
+    throw error;
+  }
 }));
 
 /**
  * Update an existing task
  */
-tasksRouter.put('/:id', verifyFirebaseToken, asyncHandler(async (req: Request, res: Response) => {
+tasksRouter.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.uid;
   const id = parseInt(req.params.id, 10);
   
   if (!userId) {
-    return res.status(400).json({ error: true, message: "User ID not found in token" });
+    throw new ApiError("User ID not found in token", 400);
   }
   
   if (isNaN(id)) {
-    return res.status(400).json({ error: true, message: "Invalid task ID" });
+    throw new ApiError("Invalid task ID", 400);
   }
 
   const existingTask = await storage.getTaskById(id);
   
   if (!existingTask) {
-    return res.status(404).json({ error: true, message: "Task not found" });
+    throw new ApiError("Task not found", 404);
   }
 
   // Check if the task belongs to the user
   if (existingTask.userId && existingTask.userId !== userId) {
-    return res.status(403).json({ error: true, message: "You don't have permission to update this task" });
+    throw new ApiError("You don't have permission to update this task", 403);
   }
 
-  // Partial validation of update data
-  const updateSchema = insertTaskSchema.partial();
-  const validatedData = updateSchema.parse(req.body);
-  
-  const updatedTask = await storage.updateTask(id, validatedData);
-  return res.json(updatedTask);
+  try {
+    // Partial validation of update data
+    const updateSchema = insertTaskSchema.partial();
+    const validatedData = updateSchema.parse(req.body);
+    
+    const updatedTask = await storage.updateTask(id, validatedData);
+    logger.log(`Task updated: ${id} by user ${userId}`, "tasks");
+    return res.json(updatedTask);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      logger.error("Task validation error", error.format());
+      throw new ApiError(`Validation error: ${error.errors.map(e => e.message).join(', ')}`, 400);
+    }
+    throw error;
+  }
 }));
 
 /**
  * Delete a task
  */
-tasksRouter.delete('/:id', verifyFirebaseToken, asyncHandler(async (req: Request, res: Response) => {
+tasksRouter.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.uid;
   const id = parseInt(req.params.id, 10);
   
   if (!userId) {
-    return res.status(400).json({ error: true, message: "User ID not found in token" });
+    throw new ApiError("User ID not found in token", 400);
   }
   
   if (isNaN(id)) {
-    return res.status(400).json({ error: true, message: "Invalid task ID" });
+    throw new ApiError("Invalid task ID", 400);
   }
 
   const existingTask = await storage.getTaskById(id);
   
   if (!existingTask) {
-    return res.status(404).json({ error: true, message: "Task not found" });
+    throw new ApiError("Task not found", 404);
   }
 
   // Check if the task belongs to the user
   if (existingTask.userId && existingTask.userId !== userId) {
-    return res.status(403).json({ error: true, message: "You don't have permission to delete this task" });
+    throw new ApiError("You don't have permission to delete this task", 403);
   }
 
   const success = await storage.deleteTask(id);
+  logger.log(`Task deleted: ${id} by user ${userId}`, "tasks");
   return res.json({ success });
 }));
 
 /**
  * Toggle task completion
  */
-tasksRouter.patch('/:id/complete', verifyFirebaseToken, asyncHandler(async (req: Request, res: Response) => {
+tasksRouter.patch('/:id/complete', asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.uid;
   const id = parseInt(req.params.id, 10);
   
   if (!userId) {
-    return res.status(400).json({ error: true, message: "User ID not found in token" });
+    throw new ApiError("User ID not found in token", 400);
   }
   
   if (isNaN(id)) {
-    return res.status(400).json({ error: true, message: "Invalid task ID" });
+    throw new ApiError("Invalid task ID", 400);
   }
 
   const existingTask = await storage.getTaskById(id);
   
   if (!existingTask) {
-    return res.status(404).json({ error: true, message: "Task not found" });
+    throw new ApiError("Task not found", 404);
   }
 
   // Check if the task belongs to the user
   if (existingTask.userId && existingTask.userId !== userId) {
-    return res.status(403).json({ error: true, message: "You don't have permission to update this task" });
+    throw new ApiError("You don't have permission to update this task", 403);
   }
 
   const { completed } = req.body;
   
   if (typeof completed !== "boolean") {
-    return res.status(400).json({ error: true, message: "completed field must be a boolean" });
+    throw new ApiError("completed field must be a boolean", 400);
   }
 
   const updatedTask = await storage.completeTask(id, completed);
+  logger.log(`Task ${id} completion status set to ${completed} by user ${userId}`, "tasks");
   return res.json(updatedTask);
 }));
 

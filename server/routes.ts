@@ -10,33 +10,9 @@ import authRouter from "./auth-routes";
 // Import the enhanced AI capabilities
 import fs from 'fs';
 import path from 'path';
-
-// Fallback mock implementation for AI capabilities
-const mockAICapabilities = {
-  generateTaskSuggestions: async (taskInput: string, count: number = 3) => {
-    return [
-      { title: `Follow up on: ${taskInput}`, category: "Important", priority: "Medium" },
-      { title: `Prepare materials for: ${taskInput}`, category: "Work", priority: "Low" },
-      { title: `Review progress on: ${taskInput}`, category: "Personal", priority: "Low" },
-    ];
-  },
-  summarizeText: async (text: string) => {
-    return text.length > 100 ? text.substring(0, 97) + "..." : text;
-  },
-  generateTaskInsights: async (tasks: any[]) => {
-    const completedTasks = tasks.filter(task => task.completed).length;
-    const completionRate = tasks.length > 0 ? (completedTasks / tasks.length) * 100 : 0;
-    
-    return {
-      summary: "You've been making steady progress on your tasks.",
-      suggestion: "Consider prioritizing high-importance tasks first to improve productivity.",
-      completionRate: Math.round(completionRate)
-    };
-  }
-};
-
-// Use the mock implementation for now
-const enhanceAICapabilities = mockAICapabilities;
+import { db } from "./db";
+import { aiRateLimiter, trackAiUsage } from "./utils/rateLimiter";
+import { generateCsrfToken } from "./utils/security";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up database tables
@@ -45,6 +21,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API Routes
   const apiRouter = express.Router();
   app.use("/api", apiRouter);
+
+  // CSRF Token endpoint
+  apiRouter.get("/csrf-token", verifyFirebaseToken, generateCsrfToken);
 
   // Auth routes (unprotected)
   apiRouter.use("/auth", authRouter);
@@ -155,30 +134,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get AI task suggestions (enhanced)
+  // Get AI task suggestions (leave as mock or comment out if not implemented)
   tasksRouter.post("/suggestions", verifyFirebaseToken, async (req: Request, res: Response) => {
-    try {
-      const validatedData = taskSuggestionSchema.parse(req.body);
-      const suggestions = await enhanceAICapabilities.generateTaskSuggestions(
-        validatedData.taskInput,
-        validatedData.count
-      );
-      
-      return res.json(suggestions);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid input", errors: error.errors });
-      }
-      console.error("Error generating task suggestions:", error);
-      return res.status(500).json({ message: "Failed to generate task suggestions" });
-    }
+    // This endpoint is not implemented with OpenRouter, so keep the mock or comment out
+    return res.status(501).json({ message: "Task suggestions not implemented with OpenRouter." });
   });
 
   // Create task with natural language processing
-  tasksRouter.post("/process", verifyFirebaseToken, async (req: Request, res: Response) => {
+  tasksRouter.post("/process", verifyFirebaseToken, aiRateLimiter, async (req: Request, res: Response) => {
     try {
       const validatedData = naturalLanguageInputSchema.parse(req.body);
+      const userId = req.user!.uid;
       const processedTask = await processTaskWithAI(validatedData.input);
+      
+      // Track AI usage
+      await trackAiUsage(userId, "gpt-3.5-turbo", validatedData.input, 0);
       
       const newTask = await storage.createTask({
         title: processedTask.title,
@@ -189,7 +159,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         completed: false,
         userId: req.user!.uid
       });
-
       return res.status(201).json(newTask);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -201,15 +170,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Summarize task description (AI enhancement)
-  tasksRouter.post("/summarize", verifyFirebaseToken, async (req: Request, res: Response) => {
+  tasksRouter.post("/summarize", verifyFirebaseToken, aiRateLimiter, async (req: Request, res: Response) => {
     try {
       const { text } = req.body;
+      const userId = req.user!.uid;
+      
       if (!text || typeof text !== "string") {
         return res.status(400).json({ message: "Text is required" });
       }
       
       try {
         const summary = await summarizeTask(text);
+        
+        // Track AI usage
+        await trackAiUsage(userId, "gpt-3.5-turbo", `Summarize: ${text.substring(0, 50)}...`, 0);
+        
         return res.json({ summary });
       } catch (aiError) {
         console.error("AI summarization error:", aiError);
@@ -459,6 +434,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating sample tasks:", error);
       return res.status(500).json({ message: "Failed to create sample tasks" });
+    }
+  });
+
+  // Create a development user with a specific UUID for testing (to match Firebase)
+  apiRouter.post("/dev/create-specific-user", async (req: Request, res: Response) => {
+    try {
+      const { uuid, email } = req.body;
+      
+      if (!uuid) {
+        return res.status(400).json({ message: "UUID is required" });
+      }
+
+      // Execute query to insert user with specific UUID
+      try {
+        // Use direct SQL query because we need to set a specific UUID
+        const result = await db.execute({
+          sql: `INSERT INTO users (
+            id, email, username, password, first_name, last_name, role, created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, NOW(), NOW()
+          ) ON CONFLICT (id) DO UPDATE SET
+            updated_at = NOW()
+          RETURNING *`,
+          params: [
+            uuid,
+            email || "test@example.com",
+            "testuser",
+            "firebase-auth-handles-passwords",
+            "Test",
+            "User",
+            "user"
+          ]
+        });
+        
+        console.log("Created user with specific UUID:", result[0]);
+        return res.status(201).json(result[0]);
+      } catch (error: any) {
+        console.error("Database error:", error);
+        return res.status(500).json({ message: "Database error creating user", error: error.message || String(error) });
+      }
+    } catch (error) {
+      console.error("Error creating user with specific UUID:", error);
+      return res.status(500).json({ message: "Failed to create user with specific UUID" });
     }
   });
 
